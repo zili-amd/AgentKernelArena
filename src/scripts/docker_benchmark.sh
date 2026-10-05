@@ -29,6 +29,9 @@ DEFAULT_RUN_CONFIG="example_configs/quickstart_claude_mi300.yaml"
 # separate from REQUIRED_AGENTS because GEAK templates normalize to claude_code
 # before Docker arguments are built.
 GEAK_RUNTIME=0
+# Set from the run config's knowledge_wiki.enabled. Only such runs mount the
+# knowledge base checkout, so the arm of an A/B pair without it cannot read it.
+KNOWLEDGE_WIKI_RUNTIME=0
 # quality_loop keeps the repository checkout read-only in the agent container.
 # Only these host-validated, run-specific subdirectories are over-mounted rw.
 QUALITY_LOOP_ARTIFACT_REL=""
@@ -513,6 +516,20 @@ configure_geak_runtime() {
     case "$(read_agent_template "$config")" in
         geak|geak_v4) GEAK_RUNTIME=1 ;;
     esac
+}
+
+configure_knowledge_wiki() {
+    local config="$1"
+    KNOWLEDGE_WIKI_RUNTIME=0
+    [[ -f "$config" ]] || return 0
+    KNOWLEDGE_WIKI_RUNTIME="$(python3 - "$config" <<'PY'
+import sys
+import yaml
+
+value = (yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}).get("knowledge_wiki")
+print(1 if isinstance(value, dict) and value.get("enabled") is True else 0)
+PY
+)"
 }
 
 agent_list_contains() {
@@ -1420,6 +1437,20 @@ build_docker_args() {
         fi
     fi
 
+    if [[ "$KNOWLEDGE_WIKI_RUNTIME" == "1" ]]; then
+        local wiki_root
+        [[ -n "${AKA_KNOWLEDGE_WIKI_ROOT:-}" ]] \
+            || die "knowledge_wiki is enabled; set AKA_KNOWLEDGE_WIKI_ROOT to the knowledge base checkout"
+        wiki_root="$(realpath -e "$AKA_KNOWLEDGE_WIKI_ROOT" 2>/dev/null)" && [[ -d "$wiki_root" ]] \
+            || die "AKA_KNOWLEDGE_WIKI_ROOT is not a directory: $AKA_KNOWLEDGE_WIKI_ROOT"
+        case "$wiki_root/" in
+            "$(realpath -e "$HOST_ROOT")/"*)
+                die "Keep the knowledge base outside $HOST_ROOT; that tree is mounted into every container" ;;
+        esac
+        add_mount "$wiki_root" "$wiki_root" ro
+        docker_args+=(-e "AKA_KNOWLEDGE_WIKI_ROOT=$wiki_root")
+    fi
+
     # The base image lacks the GNU `time` binary and the container runs as a
     # non-root user (so it cannot apt-install it). Bind-mount the host binary
     # read-only so commands that invoke `/usr/bin/time` do not fail with 127.
@@ -1944,6 +1975,7 @@ run_parallel() {
     config_name="$(extract_config_name "$@")"
     select_runtime_for_config "$config_name"
     configure_geak_runtime "$config_name"
+    configure_knowledge_wiki "$config_name"
 
     REQUIRED_AGENTS="$(resolve_required_agents "$config_name")"
     AGENTS_STRICT=1
@@ -2036,6 +2068,7 @@ case "${1:-}" in
         config_name="$(extract_config_name "$@")"
         select_runtime_for_config "$config_name"
         configure_geak_runtime "$config_name"
+        configure_knowledge_wiki "$config_name"
         # Only the configured agent's CLI/auth is required for a run.
         REQUIRED_AGENTS="$(resolve_required_agents "$config_name")"
         AGENTS_STRICT=1
@@ -2146,6 +2179,7 @@ case "${1:-}" in
         config_name="$(extract_config_name "$@")"
         select_runtime_for_config "$config_name"
         configure_geak_runtime "$config_name"
+        configure_knowledge_wiki "$config_name"
         REQUIRED_AGENTS="$(resolve_required_agents "$config_name")"
         AGENTS_STRICT=1
         docker_exec 0 bash src/scripts/docker_benchmark.sh _container_preflight "$config_name"
@@ -2168,6 +2202,7 @@ case "${1:-}" in
         config_image="$(read_config_docker_image "$config_name")" || die "Invalid runtime image configuration: $config_name"
         select_runtime_for_host "$config_image"
         configure_geak_runtime "$config_name"
+        configure_knowledge_wiki "$config_name"
         # By default, check only the CLI selected by CONFIG. AKA_AGENTS can
         # request one, several, or `all` explicitly.
         REQUIRED_AGENTS="$(normalize_check_agents "$(resolve_required_agents "$config_name")")"

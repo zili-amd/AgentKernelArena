@@ -57,4 +57,5 @@ def program_text(plan: dict, *, prefix: str = "", port: bool = False, initialize
         if initialize else "PORT first produces a correct implementation; the nested loop then optimizes it." if port else
         "Optimize the existing candidate. Keep all declared entrypoints and dependent source files.",
         *instructions,
+        *filter(None, [plan.get("knowledge_instructions")]),
     ])
