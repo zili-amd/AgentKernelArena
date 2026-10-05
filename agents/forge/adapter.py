@@ -59,7 +59,7 @@ def _config(eval_config: dict) -> dict:
         raise ValueError("agent run configuration must be a mapping")
     allowed = {"workflow", "model", "timeout_seconds", "permission_mode", "agent_backend",
                "python", "max_port_attempts", "supervisor_backend", "session_timeout_seconds",
-               "initialization_max_attempts", "initialization_budget_fraction"}
+               "initialization_max_attempts", "initialization_budget_fraction", "experience_kb"}
     config.update({key: value for key, value in overrides.items() if key in allowed})
     if overrides.get("agent_backend") not in (None, "claude") and "model" not in overrides:
         # A Claude default is not a model ID for another provider. Let upstream
@@ -74,7 +74,31 @@ def _config(eval_config: dict) -> dict:
     fraction = config["initialization_budget_fraction"]
     if type(fraction) not in (int, float) or not 0 < fraction < 1:
         raise ValueError("Forge initialization_budget_fraction must be between zero and one")
+    if config["experience_kb"] not in EXPERIENCE_KB_MODES:
+        raise ValueError("Forge experience_kb must be one of: " + ", ".join(EXPERIENCE_KB_MODES))
     return config
+
+
+EXPERIENCE_KB_MODES = ("isolated", "engine")
+REMOTE_KB_VARIABLES = ("KB_STORE_URL", "KB_STORE_TOKEN")
+
+
+def isolate_experience_kb(env: dict, artifact_root: Path, mode: str) -> dict:
+    """Point the engine at a fresh, private Experience KB unless ``mode`` keeps the engine's store.
+
+    The engine reads and publishes its KB by default and replays the best stored
+    patch before iteration 1, so a store shared across invocations carries one
+    run's result into another. Claude auto memory is the same kind of channel.
+    """
+    if mode == "engine":
+        return {"mode": mode}
+    root = artifact_root / "experience_kb"
+    root.mkdir()
+    for name in REMOTE_KB_VARIABLES:
+        env.pop(name, None)
+    env.update({"KNOWLEDGE_STORE_MODE": "local", "KNOWLEDGE_LOCAL_ROOT": str(root),
+                "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"})
+    return {"mode": mode, "root": str(root)}
 
 
 def _initialize_git(root: Path) -> None:
@@ -318,6 +342,7 @@ def launch(eval_config: dict, task_config_dir: str, workspace: str) -> str:
                     **bridge.TASK_ENV})
         arena_root = Path(__file__).resolve().parents[2]
         env["PYTHONPATH"] = os.pathsep.join([str(arena_root), *filter(None, [env.get("PYTHONPATH", "")])])
+        status["experience_kb"] = isolate_experience_kb(env, artifact_root, config["experience_kb"])
         # Probe in the exact interpreter used by both outer and nested CLIs.
         probe = subprocess.run([config.get("python") or sys.executable,
                                 str(Path(__file__).with_name("engine.py")), "--arena-probe"],
