@@ -20,6 +20,7 @@ from agents.forge import bridge
 from agents.forge.common import _read_forge_result, _resolve_gpu_arch, _resolve_gpu_type, run_forge_subprocess
 from agents.forge.task_context import TaskContext
 from agents.forge.bundles import allow_candidate_paths, candidate_files, committed_candidate, copy_workspace, install_candidate
+from src import knowledge_wiki
 from src.task_spec import resolve_task_path
 
 
@@ -343,6 +344,11 @@ def launch(eval_config: dict, task_config_dir: str, workspace: str) -> str:
         arena_root = Path(__file__).resolve().parents[2]
         env["PYTHONPATH"] = os.pathsep.join([str(arena_root), *filter(None, [env.get("PYTHONPATH", "")])])
         status["experience_kb"] = isolate_experience_kb(env, artifact_root, config["experience_kb"])
+        wiki = knowledge_wiki.resolve(eval_config)
+        if wiki is not None:
+            wiki_log = artifact_root / knowledge_wiki.LOG_NAME
+            plan["knowledge_instructions"] = wiki.instructions(config.get("python") or sys.executable, wiki_log)
+            status["knowledge_wiki"] = {**wiki.identity(), "log": str(wiki_log)}
         # Probe in the exact interpreter used by both outer and nested CLIs.
         probe = subprocess.run([config.get("python") or sys.executable,
                                 str(Path(__file__).with_name("engine.py")), "--arena-probe"],

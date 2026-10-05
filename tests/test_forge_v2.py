@@ -991,6 +991,27 @@ def test_experience_kb_rejects_unknown_mode():
         adapter._config({"agent": {"experience_kb": "shared"}})
 
 
+def test_knowledge_wiki_instructions_end_the_forge_program(tmp_path, monkeypatch):
+    from src import knowledge_wiki
+    root = tmp_path / "wiki"
+    (root / "scripts").mkdir(parents=True)
+    for name in knowledge_wiki.SCRIPTS.values():
+        (root / "scripts" / name).write_text("")
+    monkeypatch.setenv(knowledge_wiki.ROOT_ENV, str(root))
+    _, _, status = launched_engine_env(tmp_path, monkeypatch, {"knowledge_wiki": {"enabled": True}})
+    log = status.parent / knowledge_wiki.LOG_NAME
+    record = json.loads(status.read_text())["knowledge_wiki"]
+    assert record["log"] == str(log) and record["root"] == str(root.resolve())
+    program = (status.parent / "engine" / "arena_program.md").read_text()
+    assert program.endswith(knowledge_wiki.KnowledgeWiki(root.resolve()).instructions(sys.executable, log))
+
+
+def test_forge_program_has_no_knowledge_wiki_unless_enabled(tmp_path, monkeypatch):
+    _, _, status = launched_engine_env(tmp_path, monkeypatch, {})
+    assert "knowledge_wiki" not in json.loads(status.read_text())
+    assert "ROCm kernel knowledge base" not in (status.parent / "engine" / "arena_program.md").read_text()
+
+
 def test_new_nested_tree_helpers_are_visible_to_git_in_rewrite_scratch(tmp_path):
     from agents.forge.bundles import allow_candidate_paths
     context, plan, _ = fixture_task(tmp_path)
