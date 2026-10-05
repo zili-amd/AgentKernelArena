@@ -14,5 +14,9 @@ initialization_max_attempts: 3
 initialization_budget_fraction: 0.4
 # Empty follows agent_backend; no accidental provider/model mismatch.
 supervisor_backend: ""
+# isolated: each invocation reads and publishes only a fresh, empty Experience
+# KB in its own artifact directory, so no run warm-starts from another run's
+# solutions. engine: the engine's own store and warm-start defaults.
+experience_kb: isolated
 # Optional executable for an environment with Hyperloom[forge] installed.
 # python: /opt/forge/bin/python

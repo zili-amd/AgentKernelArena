@@ -942,6 +942,55 @@ def test_backend_override_does_not_forward_a_different_providers_default():
     assert explicit["model"] == "my-model"
 
 
+def launched_engine_env(tmp_path, monkeypatch, eval_config):
+    """Launch the mock engine and return its environment and KB root contents at start."""
+    context, _, _ = fixture_task(tmp_path)
+    monkeypatch.setenv("ARENA_TASK_CONTEXT", str(context.path))
+    mock_engine(monkeypatch)
+    seen = []
+    run = adapter.run_forge_subprocess
+
+    def capture(command, *, workspace, env, **kwargs):
+        root = Path(env.get("KNOWLEDGE_LOCAL_ROOT", tmp_path / "absent"))
+        seen.append((dict(env), sorted(root.iterdir()) if root.is_dir() else None))
+        return run(command, workspace=workspace, env=env, **kwargs)
+
+    monkeypatch.setattr(adapter, "run_forge_subprocess", capture)
+    adapter.launch(eval_config, "unused", str(context.workspace))
+    status, = tmp_path.glob("workspace-forge-*/arena_forge_status.json")
+    (env, contents), = seen
+    return env, contents, status
+
+
+def test_experience_kb_is_private_and_empty_by_default(tmp_path, monkeypatch):
+    monkeypatch.setenv("KB_STORE_URL", "https://kb.example")
+    monkeypatch.setenv("KB_STORE_TOKEN", "token")
+    monkeypatch.setenv("KNOWLEDGE_STORE_MODE", "remote")
+    monkeypatch.setenv("KNOWLEDGE_LOCAL_ROOT", str(tmp_path / "shared-kb"))
+    env, contents, status = launched_engine_env(tmp_path, monkeypatch, {})
+    assert env["KNOWLEDGE_STORE_MODE"] == "local"
+    assert Path(env["KNOWLEDGE_LOCAL_ROOT"]) == status.parent / "experience_kb"
+    assert contents == []
+    assert "KB_STORE_URL" not in env and "KB_STORE_TOKEN" not in env
+    assert env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
+    assert json.loads(status.read_text())["experience_kb"]["mode"] == "isolated"
+
+
+def test_experience_kb_engine_mode_keeps_the_engine_store(tmp_path, monkeypatch):
+    monkeypatch.setenv("KB_STORE_URL", "https://kb.example")
+    monkeypatch.delenv("KNOWLEDGE_STORE_MODE", raising=False)
+    monkeypatch.delenv("KNOWLEDGE_LOCAL_ROOT", raising=False)
+    env, _, status = launched_engine_env(tmp_path, monkeypatch, {"agent": {"experience_kb": "engine"}})
+    assert env["KB_STORE_URL"] == "https://kb.example"
+    assert "KNOWLEDGE_LOCAL_ROOT" not in env and "KNOWLEDGE_STORE_MODE" not in env
+    assert json.loads(status.read_text())["experience_kb"] == {"mode": "engine"}
+
+
+def test_experience_kb_rejects_unknown_mode():
+    with pytest.raises(ValueError, match="experience_kb"):
+        adapter._config({"agent": {"experience_kb": "shared"}})
+
+
 def test_new_nested_tree_helpers_are_visible_to_git_in_rewrite_scratch(tmp_path):
     from agents.forge.bundles import allow_candidate_paths
     context, plan, _ = fixture_task(tmp_path)

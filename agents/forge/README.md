@@ -351,14 +351,25 @@ Search defaults live in [agent_config.yaml](agent_config.yaml); the run may
 override `workflow`, `model`, `agent_backend`, `permission_mode`,
 `timeout_seconds`, `session_timeout_seconds`, `max_port_attempts`,
 `initialization_max_attempts`, `initialization_budget_fraction`,
-`supervisor_backend`, and `python`. An empty supervisor follows the selected
-backend. Lane count, task preparation, profiling, planning probes and knowledge
-warm starts follow the engine defaults. Arena publishes the task and leaves the
-search policy to Forge. Two consequences are load bearing. The public task
-protocol exposes no profiler invocation, so the bridge answers `--profile-run`
-with an explicit unsupported capability. A single-file upstream recipe cannot
-describe a multi-file candidate, so a task whose `candidate.editable` spans more
-than one file may receive a warm start that covers only part of its submission.
+`supervisor_backend`, `experience_kb`, and `python`. An empty supervisor follows
+the selected backend. Lane count, task preparation, profiling and planning probes
+follow the engine defaults. Arena publishes the task and leaves the search policy
+to Forge, except for the Experience KB below. The public task protocol exposes
+no profiler invocation, so the bridge answers `--profile-run` with an explicit
+unsupported capability.
+
+The engine reads and publishes its Experience KB by default and applies the
+best stored solution before iteration 1. With the default
+`experience_kb: isolated`, each invocation gets a fresh, empty local store under
+its artifact directory (`experience_kb/`): `KNOWLEDGE_STORE_MODE=local`,
+`KNOWLEDGE_LOCAL_ROOT` set to that directory, `KB_STORE_URL` and
+`KB_STORE_TOKEN` removed, and Claude auto memory disabled. No run can warm-start
+from another run's solutions, matching the GEAK adapter's disabled external warm
+starts. The status file records the mode and root, and the store stays inspectable
+after the run. `experience_kb: engine` restores the engine's own store and
+warm-start defaults; under it, a single-file upstream recipe cannot describe a
+multi-file candidate, so a task whose `candidate.editable` spans more than one
+file may receive a warm start that covers only part of its submission.
 
 Search behaviour stays behind what the removed patch layer forced until the
 engine grows the seams it took: no injected protected paths, no total wall clock
