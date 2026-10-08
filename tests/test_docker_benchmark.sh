@@ -176,6 +176,19 @@ if run_shell_args AKA_GPU_ARCH=gfx950 AKA_DOCKER_PRIVILEGED=invalid >/dev/null; 
     fail "invalid privilege mode was accepted"
 fi
 
+# exec runs one command in the runtime with the requested GPU, no agent CLI and
+# no forwarded credentials, and refuses an empty command.
+mapfile -t args < <(env HOME="$TEST_HOME" AKA_GPU_ARCH=gfx950 AKA_VISIBLE_GPU=3 \
+    ANTHROPIC_AUTH_TOKEN=exec-must-not-receive-this \
+    bash "$RUNNER" exec python3 -c 'print("screen")' 2>/dev/null)
+assert_has 'ROCR_VISIBLE_DEVICES=3' "${args[@]}"
+assert_has 'print("screen")' "${args[@]}"
+assert_not_has "ANTHROPIC_AUTH_TOKEN" "${args[@]}"
+assert_not_has "-it" "${args[@]}"
+if env HOME="$TEST_HOME" AKA_GPU_ARCH=gfx950 bash "$RUNNER" exec >/dev/null 2>&1; then
+    fail "exec without a command was accepted"
+fi
+
 # Sanitizer sidecars accept the scoring runtime only when the selected reference
 # and the known manifest reference resolve to the same immutable local config ID,
 # and launch that ID rather than a mutable tag. An alias to identical content is
