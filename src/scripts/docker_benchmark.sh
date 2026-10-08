@@ -70,6 +70,7 @@ Usage:
   src/scripts/docker_benchmark.sh parallel-run [main.py args...]
   src/scripts/docker_benchmark.sh preflight [--config_name <run-config.yaml>]
   src/scripts/docker_benchmark.sh shell
+  src/scripts/docker_benchmark.sh exec <command> [args...]
   src/scripts/docker_benchmark.sh check-agents [--config_name <run-config.yaml>]
   src/scripts/docker_benchmark.sh quality-loop [--config <quality-loop-config.yaml>] [quality_loop args...]
   src/scripts/docker_benchmark.sh sikl-task-builder [--config <config.yaml>] <inspect|run|resume> [args...]
@@ -2280,6 +2281,16 @@ case "${1:-}" in
         REQUIRED_AGENTS="$(resolve_required_agents "$config_name")"
         AGENTS_STRICT=1
         docker_exec 0 bash src/scripts/docker_benchmark.sh _container_preflight "$config_name"
+        ;;
+    exec)
+        # Run one command non-interactively in the runtime, e.g. a baseline-only
+        # measurement. No agent CLI is provisioned, so no credentials are forwarded.
+        shift
+        [[ $# -gt 0 ]] || die "exec needs a command"
+        select_runtime_for_host
+        REQUIRED_AGENTS=""
+        AGENTS_STRICT=0
+        docker_exec 0 "$@"
         ;;
     shell)
         select_runtime_for_host
