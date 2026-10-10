@@ -1183,7 +1183,7 @@ build_docker_args() {
     if [[ "$GEAK_RUNTIME" == "1" || "$FORGE_RUNTIME" == "1" ]] && agent_list_contains "$agents" claude_code; then
         local claude_env_var
         for claude_env_var in \
-            ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_BASE_URL \
+            ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_BASE_URL ANTHROPIC_CUSTOM_HEADERS \
             ANTHROPIC_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL \
             ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL \
             CLAUDE_CODE_SUBAGENT_MODEL API_TIMEOUT_MS \

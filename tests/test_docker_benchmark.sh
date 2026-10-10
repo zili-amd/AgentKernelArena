@@ -887,6 +887,15 @@ assert_has "ANTHROPIC_AUTH_TOKEN" "${args[@]}"
 assert_not_has "ANTHROPIC_AUTH_TOKEN=dummy-token-value" "${args[@]}"
 assert_has "ANTHROPIC_BASE_URL" "${args[@]}"
 
+# A gateway that authenticates with a subscription header gets it by name too.
+mapfile -t args < <(run_check_args \
+    "$GEAK_HOME" \
+    "$GEAK_CONFIG" \
+    AKA_NODE_PREFIX="$GEAK_PREFIX" \
+    ANTHROPIC_CUSTOM_HEADERS="Ocp-Apim-Subscription-Key: dummy-subscription")
+assert_has "ANTHROPIC_CUSTOM_HEADERS" "${args[@]}"
+assert_not_has "ANTHROPIC_CUSTOM_HEADERS=Ocp-Apim-Subscription-Key: dummy-subscription" "${args[@]}"
+
 # A plain ANTHROPIC_API_KEY (e.g. api.anthropic.com auth) is likewise forwarded.
 mapfile -t args < <(env -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL \
     HOME="$GEAK_HOME" AKA_GPU_ARCH=gfx950 AKA_NODE_PREFIX="$GEAK_PREFIX" \
