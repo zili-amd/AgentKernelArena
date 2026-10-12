@@ -1,8 +1,11 @@
 # Kernel knowledge base A/B experiment on MI300X: KernelForge with and without
-# InstinctWiki (infinity-wiki). Protocol: PROTOCOL.md; setup and runs: SKILL.md.
+# InstinctWiki (infinity-wiki). Protocol: PROTOCOL.md; setup and runs: skills/.
 # Append to `invocations` and `exclusions` while running; never edit
 # `preregistration` after the first main-phase launch.
 experiment: instinct-wiki-ab
+question: >-
+  Does read-only access to the InstinctWiki knowledge base make the kernels
+  KernelForge writes on MI300X faster, from the same starting point in the same time?
 hardware:
   gpu: MI300X
   arch: gfx942

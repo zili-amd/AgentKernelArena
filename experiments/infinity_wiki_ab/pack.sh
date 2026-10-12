@@ -21,16 +21,17 @@ pin() { python3 -c "import sys, yaml; print(yaml.safe_load(open(sys.argv[1]))['p
 [[ -z "$(git -C "$AKA_SRC" status --porcelain --untracked-files=no)" ]] \
     || { echo "ERROR: commit or stash the changes in $AKA_SRC first; the pin is its HEAD" >&2; exit 1; }
 
-# Bundle `commit` from `repo` under the branch name `ab-pin`, via a scratch clone
-# so that no ref is created in the source repository.
+# Bundle `commit` from `repo` under the branch name `ab-pin`, via a scratch mirror
+# so that no ref is created in the source repository. A mirror also carries the
+# source's remote-tracking refs, where a local checkout often holds the pin.
 bundle() {
     local name="$1" repo="$2" commit="$3" scratch
     scratch="$(mktemp -d "$DIST/.scratch-XXXXXX")"
-    git clone -q --no-checkout "$repo" "$scratch/repo"
-    git -C "$scratch/repo" cat-file -e "$commit^{commit}" || { echo "missing $commit in $repo" >&2; exit 1; }
-    git -C "$scratch/repo" branch -q -f ab-pin "$commit"
-    git -C "$scratch/repo" bundle create -q "$DIST/$name.bundle" ab-pin
-    git -C "$scratch/repo" bundle verify -q "$DIST/$name.bundle" >/dev/null
+    git clone -q --mirror "$repo" "$scratch/repo.git"
+    git -C "$scratch/repo.git" cat-file -e "$commit^{commit}" || { echo "missing $commit in $repo" >&2; exit 1; }
+    git -C "$scratch/repo.git" branch -q -f ab-pin "$commit"
+    git -C "$scratch/repo.git" bundle create -q "$DIST/$name.bundle" ab-pin
+    git -C "$scratch/repo.git" bundle verify -q "$DIST/$name.bundle" >/dev/null
     rm -rf "$scratch"
     printf '%s %s\n' "$name" "$commit" >> "$DIST/pins.txt"
 }
@@ -46,7 +47,7 @@ if [[ " ${ARMS[*]} " == *" geak"* ]]; then
 fi
 
 python3 "$HERE/make_configs.py" --out "$DIST/experiment/configs" >/dev/null
-cp "$HERE"/*.yaml "$HERE"/*.sh "$HERE"/*.py "$DIST/experiment/"
+cp "$HERE"/*.yaml "$HERE"/*.sh "$HERE"/*.py "$HERE/TEST_RECORD_TEMPLATE.md" "$HERE/PROTOCOL.md" "$DIST/experiment/"
 printf '%s\n' "${ARMS[@]}" > "$DIST/arms.txt"
 du -sh "$DIST"/*.bundle
 cat "$DIST/pins.txt"

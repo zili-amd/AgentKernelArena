@@ -5,6 +5,7 @@
 # Credentials come from the caller's environment and are forwarded by name only.
 set -euo pipefail
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(realpath -m "${1:?usage: launch_wave.sh ROOT PHASE TASK REPEAT GPU_BASE [--dry-run]}")"
 PHASE="${2:?phase}"; TASK="${3:?task}"; REPEAT="${4:?repeat}"; GPU_BASE="${5:?gpu base}"
 DRY_RUN=0; [[ "${6:-}" == "--dry-run" ]] && DRY_RUN=1
@@ -89,4 +90,5 @@ if [[ "$DRY_RUN" == "0" ]]; then
     echo "launched ${#pids[@]} arms for $PHASE $TASK r$REPEAT; logs in $LOG_DIR"
     wait "${pids[@]}"
     echo "finished $PHASE $TASK r$REPEAT; see $LEDGER"
+    python3 "$HERE/make_record.py" "$ROOT" --phase "$PHASE" || echo "WARN: the $PHASE test record was not updated" >&2
 fi
