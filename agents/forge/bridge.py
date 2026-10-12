@@ -110,6 +110,11 @@ def execute(plan: dict, engine_root: Path, *, role: str, action: str):
         phases = ["compile"] if action == "compile" else ["compile", action]
         if role == "candidate" and action == "performance":
             phases = ["compile", "correctness", "performance"]
+        if action == "profile":
+            # The task protocol has no kernel-only action, so a profiler sees
+            # the candidate's complete performance action: every manifest case,
+            # any reference timing the task performs, and its timing loop.
+            phases = ["compile", "performance"]
         result = None
         for step in phases:
             deadline = min(plan["deadline_unix"], plan.get("phase_deadline_unix", plan["deadline_unix"]))
@@ -165,20 +170,19 @@ def run(plan_path: str | Path, engine_root: str | Path, argv: list[str] | None =
     parser.add_argument("--warmup", type=int)
     parser.add_argument("--iters", type=int)
     args = parser.parse_args(argv)
-    if args.profile_run:
-        print('capability: {"profile": "unsupported", "reason": "no public task profiling action"}')
-        return 2
     role = "baseline" if args.ref_bench_mode else "candidate"
-    action = "performance" if args.bench_mode or args.ref_bench_mode else "compile" if args.compile_only else "correctness"
+    action = ("performance" if args.bench_mode or args.ref_bench_mode else "profile" if args.profile_run
+              else "compile" if args.compile_only else "correctness")
     try:
         result = execute(load_plan(Path(plan_path)), Path(engine_root).resolve(strict=True), role=role, action=action)
         if action == "performance":
             emit_timings(result)
-        else:
+        elif action != "profile":
             print("allclose: True")
         return 0
     except Exception as exc:
-        print("allclose: False")
+        if action != "profile":
+            print("allclose: False")
         print(f"arena_error: {type(exc).__name__}: {exc}")
         if isinstance(exc, (TaskExecutionError, ActionCheckFailure)) and exc.commands:
             command = exc.commands[-1]
