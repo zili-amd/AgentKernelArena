@@ -19,9 +19,11 @@ pins:
   # main f2b32cdc9 plus the read-only knowledge base tools for every forge role.
   hyperloom: {repo: AMD-AGI/Hyperloom, branch: forge-knowledge-wiki-tool, commit: da36f813e5078dfe0e89eac922a8622f8567add9}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
-  # 19 curated pages, 132 source pages; no main task is covered (audit: transfer class for all four).
-  # Its SKILL.md still says the corpus is unbuilt; the main phase waits for a fixed guide.
-  wiki: {repo: AMD-BRAIN-Internal/infinity-wiki, commit: 62f09f04733c82d382fb0fb8df48cacc8c56738b, variant: v0-unmodified}
+  # 20 curated pages, 147 source pages (18 official AMD docs), a SKILL.md that matches the corpus.
+  # Overlap audit at 0e70cb2: refk_fp8_blockwise_mm and mla_decode are transfer (no page names them);
+  # moe_gemm and test_flashattention_fwd are self-reference (kernel-rocmbench-triton-tflops holds AKA's
+  # baseline TFLOPs for them, no implementation), so report those two separately.
+  wiki: {repo: AMD-BRAIN-Internal/infinity-wiki, commit: 0e70cb2bcc398c4720c8223426c0bdcd42a0b1aa, variant: v0-unmodified}
   model: claude-opus-5  # confirm the gateway's id at the pilot; identical in every arm
 
 arms:
