@@ -1,6 +1,7 @@
 """Real CPU task-command coverage for the provider bridge (no GPU claims)."""
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import os
@@ -414,14 +415,16 @@ def test_action_budget_is_capped_by_remaining_campaign(tmp_path):
         bounded_spec(context.spec, time.time() - 1)
 
 
-def mock_engine(monkeypatch, *, fail=False, port_ok=True, timeout=False, applyback_optional=False):
+def mock_engine(monkeypatch, *, fail=False, port_ok=True, timeout=False, applyback_optional=False,
+                knowledge_wiki_tool=True):
     commands = []
     real_run = subprocess.run
     def subprocess_run(command, **kwargs):
         if "--arena-probe" in command:
             return SimpleNamespace(returncode=0, stdout=json.dumps(
                 {"backends": ["flydsl", "hip", "triton"], "adapter_api": 1,
-                 "applyback_optional": applyback_optional}), stderr="")
+                 "applyback_optional": applyback_optional,
+                 "knowledge_wiki_tool": knowledge_wiki_tool}), stderr="")
         return real_run(command, **kwargs)
     monkeypatch.setattr(adapter.subprocess, "run", subprocess_run)
     monkeypatch.setattr(adapter, "_resolve_gpu_arch", lambda _: "gfx950")
@@ -977,11 +980,11 @@ def test_backend_override_does_not_forward_a_different_providers_default():
     assert explicit["model"] == "my-model"
 
 
-def launched_engine_env(tmp_path, monkeypatch, eval_config):
+def launched_engine_env(tmp_path, monkeypatch, eval_config, **engine):
     """Launch the mock engine and return its environment and KB root contents at start."""
     context, _, _ = fixture_task(tmp_path)
     monkeypatch.setenv("ARENA_TASK_CONTEXT", str(context.path))
-    mock_engine(monkeypatch)
+    mock_engine(monkeypatch, **engine)
     seen = []
     run = adapter.run_forge_subprocess
 
@@ -1026,25 +1029,45 @@ def test_experience_kb_rejects_unknown_mode():
         adapter._config({"agent": {"experience_kb": "shared"}})
 
 
-def test_knowledge_wiki_instructions_end_the_forge_program(tmp_path, monkeypatch):
+def _knowledge_wiki_root(tmp_path, monkeypatch):
     from src import knowledge_wiki
     root = tmp_path / "wiki"
     (root / "scripts").mkdir(parents=True)
     for name in knowledge_wiki.SCRIPTS.values():
         (root / "scripts" / name).write_text("")
     monkeypatch.setenv(knowledge_wiki.ROOT_ENV, str(root))
-    _, _, status = launched_engine_env(tmp_path, monkeypatch, {"knowledge_wiki": {"enabled": True}})
+    return root
+
+
+def test_forge_serves_the_knowledge_wiki_to_its_agents_as_engine_tools(tmp_path, monkeypatch):
+    from src import knowledge_wiki
+    root = _knowledge_wiki_root(tmp_path, monkeypatch)
+    env, _, status = launched_engine_env(tmp_path, monkeypatch, {"knowledge_wiki": {"enabled": True}})
     log = status.parent / knowledge_wiki.LOG_NAME
+    assert env["FORGE_KNOWLEDGE_WIKI_ROOT"] == str(root.resolve())
+    assert env["FORGE_KNOWLEDGE_WIKI_LOG"] == str(log)
     record = json.loads(status.read_text())["knowledge_wiki"]
     assert record["log"] == str(log) and record["root"] == str(root.resolve())
+    assert record["delivery"] == "engine_tools"
+    assert record["instructions_sha256"] == hashlib.sha256(knowledge_wiki.TOOL_INSTRUCTIONS.encode()).hexdigest()
     program = (status.parent / "engine" / "arena_program.md").read_text()
-    assert program.endswith(knowledge_wiki.KnowledgeWiki(root.resolve()).instructions(sys.executable, log))
+    assert program.endswith(knowledge_wiki.TOOL_INSTRUCTIONS)
+    assert "knowledge_wiki.py" not in program
 
 
-def test_forge_program_has_no_knowledge_wiki_unless_enabled(tmp_path, monkeypatch):
-    _, _, status = launched_engine_env(tmp_path, monkeypatch, {})
+def test_a_knowledge_wiki_run_refuses_an_engine_without_the_tool(tmp_path, monkeypatch):
+    _knowledge_wiki_root(tmp_path, monkeypatch)
+    with pytest.raises(adapter.ForgeRunError, match="no knowledge base tool"):
+        launched_engine_env(tmp_path, monkeypatch, {"knowledge_wiki": {"enabled": True}}, knowledge_wiki_tool=False)
+
+
+def test_forge_gets_no_knowledge_wiki_unless_enabled(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGE_KNOWLEDGE_WIKI_ROOT", str(tmp_path / "inherited-wiki"))
+    monkeypatch.setenv("FORGE_KNOWLEDGE_WIKI_LOG", str(tmp_path / "inherited.jsonl"))
+    env, _, status = launched_engine_env(tmp_path, monkeypatch, {})
+    assert "FORGE_KNOWLEDGE_WIKI_ROOT" not in env and "FORGE_KNOWLEDGE_WIKI_LOG" not in env
     assert "knowledge_wiki" not in json.loads(status.read_text())
-    assert "ROCm kernel knowledge base" not in (status.parent / "engine" / "arena_program.md").read_text()
+    assert "Kernel knowledge base" not in (status.parent / "engine" / "arena_program.md").read_text()
 
 
 def test_new_nested_tree_helpers_are_visible_to_git_in_rewrite_scratch(tmp_path):

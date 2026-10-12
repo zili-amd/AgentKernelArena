@@ -82,6 +82,8 @@ def _config(eval_config: dict) -> dict:
 
 EXPERIENCE_KB_MODES = ("isolated", "engine")
 REMOTE_KB_VARIABLES = ("KB_STORE_URL", "KB_STORE_TOKEN")
+# kernelforge.config.Config reads these; a run without the knowledge base must not inherit them.
+KNOWLEDGE_WIKI_ENGINE_ENV = {"root": "FORGE_KNOWLEDGE_WIKI_ROOT", "log": "FORGE_KNOWLEDGE_WIKI_LOG"}
 
 
 def isolate_experience_kb(env: dict, artifact_root: Path, mode: str) -> dict:
@@ -345,10 +347,16 @@ def launch(eval_config: dict, task_config_dir: str, workspace: str) -> str:
         env["PYTHONPATH"] = os.pathsep.join([str(arena_root), *filter(None, [env.get("PYTHONPATH", "")])])
         status["experience_kb"] = isolate_experience_kb(env, artifact_root, config["experience_kb"])
         wiki = knowledge_wiki.resolve(eval_config)
+        for name in KNOWLEDGE_WIKI_ENGINE_ENV.values():
+            env.pop(name, None)
         if wiki is not None:
+            # The engine serves it to every agent as read-only tools: its planning roles have no shell.
             wiki_log = artifact_root / knowledge_wiki.LOG_NAME
-            plan["knowledge_instructions"] = wiki.instructions(config.get("python") or sys.executable, wiki_log)
-            status["knowledge_wiki"] = {**wiki.identity(), "log": str(wiki_log)}
+            env.update({KNOWLEDGE_WIKI_ENGINE_ENV["root"]: str(wiki.root),
+                        KNOWLEDGE_WIKI_ENGINE_ENV["log"]: str(wiki_log)})
+            plan["knowledge_instructions"] = knowledge_wiki.TOOL_INSTRUCTIONS
+            status["knowledge_wiki"] = {**wiki.identity(knowledge_wiki.TOOL_INSTRUCTIONS),
+                                        "delivery": "engine_tools", "log": str(wiki_log)}
         # Probe in the exact interpreter used by both outer and nested CLIs.
         probe = subprocess.run([config.get("python") or sys.executable,
                                 str(Path(__file__).with_name("engine.py")), "--arena-probe"],
@@ -358,6 +366,9 @@ def launch(eval_config: dict, task_config_dir: str, workspace: str) -> str:
             raise ForgeRunError("KernelForge runtime preflight failed: " + probe.stderr[-3000:])
         capabilities = json.loads(probe.stdout)
         status["engine"] = capabilities
+        if wiki is not None and not capabilities.get("knowledge_wiki_tool"):
+            raise ForgeRunError("knowledge_wiki is enabled, but the installed KernelForge offers its agents "
+                                "no knowledge base tool (kernelforge.knowledge.wiki_tool)")
         plan["applyback_optional"] = bool(capabilities.get("applyback_optional"))
         require_supported_backend(context.spec, capabilities)
         candidate = context.spec.candidate
