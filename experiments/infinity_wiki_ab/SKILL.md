@@ -49,6 +49,11 @@ git clone -b infinity-wiki-AB-test https://github.com/AMD-AGI/AgentKernelArena.g
 cd AgentKernelArena/experiments/infinity_wiki_ab     # every local command below runs here
 ```
 
+If the branch, or the Hyperloom branch `forge-knowledge-wiki-tool` that the
+manifest pins, is not on GitHub yet, ask whoever has them for git bundles
+(`git bundle create ab.bundle infinity-wiki-AB-test`), clone from the bundles,
+and point `pack.sh` at the local Hyperloom clone with `HYPERLOOM_SRC`.
+
 ## 2. Pin the wiki (before every main launch)
 
 The wiki changes daily, so pin the newest commit at launch time:
