@@ -268,10 +268,45 @@ print(json.dumps(asyncio.run(main())))
                for report in reports.values())
 
 
-def test_profile_reports_public_contract_capability(tmp_path, capsys):
+def test_profile_runs_candidate_performance_without_gate_or_timing_output(tmp_path, monkeypatch, capsys):
+    # Upstream preflight requires --profile-run to exit 0; an unsupported answer
+    # makes its preparation agent replace this task-owned driver.
     _, plan, path = fixture_task(tmp_path)
-    assert bridge.run(path, plan["engine_root"], ["--profile-run"]) == 2
-    assert "unsupported" in capsys.readouterr().out
+    calls = []
+    real = bridge.run_action
+    def spy(spec, workspace, **kwargs):
+        calls.append((kwargs["role"], kwargs["action"]))
+        return real(spec, workspace, **kwargs)
+    monkeypatch.setattr(bridge, "run_action", spy)
+    assert bridge.run(path, plan["engine_root"], ["--profile-run"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert not any(line.startswith(("allclose:", "case_ms:", "mean_ms:")) for line in lines)
+    assert calls == [("candidate", "compile"), ("candidate", "performance")]
+    (Path(plan["engine_root"]) / "source/helper.py").write_text("100")
+    assert bridge.run(path, plan["engine_root"], ["--profile-run"]) == 1
+    assert "wrong multiplication" in capsys.readouterr().out
+
+
+def test_real_upstream_preflight_keeps_generated_driver(tmp_path):
+    python = os.environ.get("AKA_FORGE_PROBE_PYTHON")
+    if not python:
+        pytest.skip("Set AKA_FORGE_PROBE_PYTHON to the pinned Hyperloom[forge] interpreter")
+    _, plan, path = fixture_task(tmp_path)
+    engine = Path(plan["engine_root"])
+    driver = engine / "arena_forge_driver.py"
+    driver.write_text(bridge.render_driver(path, ROOT))
+    script = r'''
+import json, sys
+from kernelforge.loop.task_preparer import preflight_task
+result = preflight_task(driver=sys.argv[1], require_profile=True)
+print(json.dumps({"ok": result.ok, "profile_ok": result.profile_ok, "reasons": result.reasons}))
+'''
+    result = subprocess.run([python, "-c", script, str(driver)], cwd=engine,
+                            env=dict(os.environ, PYTHONPATH=str(ROOT)),
+                            capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = json.loads(result.stdout.strip().splitlines()[-1])
+    assert report == {"ok": True, "profile_ok": True, "reasons": []}
 
 
 @pytest.mark.parametrize("selector", ["--case", "--shape", "--profile-case"])

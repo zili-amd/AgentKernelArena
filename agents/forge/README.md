@@ -151,7 +151,7 @@ Forge generates `arena_forge_driver.py` in its private engine workspace:
 | Default / `--mode` | Candidate compile, correctness |
 | `--bench-mode` | Candidate compile, correctness, performance |
 | `--ref-bench-mode` | Baseline compile, performance |
-| `--profile-run` | Explicit unsupported response; no public profiling action exists |
+| `--profile-run` | Candidate compile, performance; no gate or timing output |
 
 Baseline numerical validation is the framework's initial-validation policy;
 the driver never substitutes baseline correctness for candidate correctness.
@@ -370,9 +370,15 @@ override `workflow`, `model`, `agent_backend`, `permission_mode`,
 `supervisor_backend`, `experience_kb`, and `python`. An empty supervisor follows
 the selected backend. Lane count, task preparation, profiling and planning probes
 follow the engine defaults. Arena publishes the task and leaves the search policy
-to Forge, except for the Experience KB below. The public task protocol exposes
-no profiler invocation, so the bridge answers `--profile-run` with an explicit
-unsupported capability.
+to Forge, except for the Experience KB below.
+
+The engine's task preparation requires `--profile-run` to exit 0; otherwise its
+preparation agent replaces this driver with one it writes, which then gates
+candidates by its own correctness check and reports case IDs that differ from
+the URL-encoded IDs in the baseline file, so no candidate earns a per-case
+speedup. The public task protocol has no kernel-only action, so `--profile-run`
+runs the candidate's complete performance action: a profiler sees every
+manifest case, any reference timing the task performs, and its timing loop.
 
 The engine reads and publishes its Experience KB by default and applies the
 best stored solution before iteration 1. With the default
