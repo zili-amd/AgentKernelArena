@@ -351,6 +351,26 @@ def _v2_digests(root: Path, spec: TaskSpec, paths: Iterable[str],
     return result
 
 
+def verify_symbol_scope(original: Path, candidate: Path, spec: TaskSpec, relative: str) -> None:
+    """Apply the final evaluation's policy to one symbol-scoped candidate file.
+
+    An agent searching over candidates calls this for each one, so that a
+    candidate the evaluator would reject fails while the agent can still read why.
+    """
+    edit = next(e for e in spec.candidate.editable if e.scope == "symbols" and e.path == relative)
+    try:
+        ast.parse(candidate.read_text(encoding="utf-8"))
+    except (UnicodeError, SyntaxError):
+        # The task's own compile action reports it with the compiler's diagnostics.
+        return
+    initial = _top_level_names(original)
+    entrypoints = frozenset(e.symbol for e in spec.candidate.entrypoints if e.file == relative and e.symbol)
+    if (_v2_symbol_digest(candidate, edit, initial, entrypoints)
+            != _v2_symbol_digest(original, edit, initial, entrypoints)):
+        raise RuntimeError(f"Protected test/harness policy rejected {candidate.name}: "
+                           "it changes statements outside its editable definitions")
+
+
 def _is_protected_path(rel: Path) -> bool:
     parts = set(rel.parts[:-1])
     name = rel.name

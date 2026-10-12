@@ -930,6 +930,33 @@ def test_test_named_target_still_checks_colocated_harness_before_execution(tmp_p
         bridge.execute(plan, engine, role="candidate", action="performance")
 
 
+def test_search_refuses_what_the_final_harness_policy_refuses(tmp_path, capsys):
+    # A pilot KEEP'd a candidate with a custom decorator on an editable kernel; the
+    # final evaluation rejected it, so the run scored as a failure.
+    context, plan, path = fixture_task(tmp_path, language="triton")
+    data = json.loads(context.path.read_text())
+    data["task_config"]["candidate"] = {
+        "language": "triton",
+        "editable": [{"path": "impl.py", "scope": "symbols", "symbols": ["compute"], "allow_new_helpers": True}],
+    }
+    context.path.write_text(json.dumps(data))
+    original = "def compute(x):\n    return x\n"
+    template, engine = Path(plan["template"]), Path(plan["engine_root"])
+    for root in (template, engine):
+        (root / "impl.py").write_text(original)
+    (engine / "impl.py").write_text("def _cache(fn):\n    return fn\n\n@_cache\ndef compute(x):\n    return x * 2\n")
+    assert bridge.run(path, engine, ["--bench-mode"]) == 1
+    output = capsys.readouterr().out
+    assert "only compiler decorators are allowed" in output and "case_ms:" not in output
+    (engine / "impl.py").write_text("def _twice(x):\n    return x * 2\n\ndef compute(x):\n    return _twice(x)\n")
+    assert bridge.execute(plan, engine, role="candidate", action="correctness").passed
+    # A candidate that does not parse is left to the task's compile action and its diagnostics.
+    unparsable = engine / "impl.py"
+    unparsable.write_text("def compute(x):\n    return (x\n")
+    from src.harness_guard import verify_symbol_scope
+    verify_symbol_scope(template / "impl.py", unparsable, TaskContext.load(context.path).spec, "impl.py")
+
+
 def test_nested_session_children_are_reaped_after_timeout(tmp_path):
     """A grandchild calls setsid(), so killing only the parent group is insufficient."""
     script = r'''
