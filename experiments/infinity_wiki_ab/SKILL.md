@@ -34,8 +34,9 @@ log(kf_wiki / kf); exact Wilcoxon and a bootstrap CI over 4 tasks × 3 repeats.
 - **Packing machine:** git with read access to `AMD-AGI/AgentKernelArena`,
   `AMD-AGI/Hyperloom` and `AMD-BRAIN-Internal/infinity-wiki`; python3 with PyYAML.
 - **GPU node:** MI300X (gfx942), Docker, `rocm-smi`, python3 with PyYAML, about
-  80 GB of disk for the runtime image, internet access on first provision (Docker
-  image, Node.js, npm). Two free GPUs per pair; a full main wave uses eight.
+  110 GB of free disk (the runtime image alone is 102 GB), internet access on first
+  provision (Docker image, Node.js, npm). Two free GPUs per pair; a full main wave
+  uses eight.
 - **LLM gateway:** `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY` (or
   `ANTHROPIC_AUTH_TOKEN`) and, if the gateway needs one, `ANTHROPIC_CUSTOM_HEADERS`.
   Never print them or put them in argv; pipe them through ssh stdin (step 6).
