@@ -8,7 +8,9 @@ myst:
 # Offer a kernel knowledge base to agents
 
 A run can give its agents read-only access to a kernel knowledge base checkout
-such as [ROCmKernelWiki](https://github.com/jhinpan/ROCmKernelWiki). The feature
+that follows the [KernelWiki](https://github.com/mit-han-lab/KernelWiki) layout,
+such as [ROCmKernelWiki](https://github.com/jhinpan/ROCmKernelWiki) or InstinctWiki
+(`AMD-BRAIN-Internal/infinity-wiki`). The feature
 exists for A/B experiments that compare the same agent with and without the
 knowledge base. Both arms of such an experiment must differ only in this setting.
 
@@ -51,12 +53,13 @@ Workflow call. Agents query from the shell:
 
 ```text
 <python> src/knowledge_wiki.py --root <checkout> --log <log> search "<question>" [filters]
-<python> src/knowledge_wiki.py --root <checkout> --log <log> page <page-id> [--summary]
+<python> src/knowledge_wiki.py --root <checkout> --log <log> page <page-id>
 <python> src/knowledge_wiki.py --root <checkout> --log <log> grep "<regex>"
 ```
 
 The command passes the knowledge base's own output and exit status through
-unchanged.
+unchanged. The instructions name only the options these knowledge bases share
+and point agents at each subcommand's `--help` for the rest.
 
 ## Logs and identity
 

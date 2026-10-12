@@ -15,21 +15,32 @@ from src import knowledge_wiki
 CLI = Path(knowledge_wiki.__file__).resolve()
 ENABLED = {"knowledge_wiki": {"enabled": True}}
 
-# Output shapes of the real query.py, get_page.py and grep_wiki.py.
+GET_PAGE = ('import sys; print("# page " + sys.argv[1]); '
+            'sys.exit(0 if sys.argv[1] == "--help" else 3 if sys.argv[1] == "missing" else 0)')
+# Output shapes of the real query.py, get_page.py and grep_wiki.py of ROCmKernelWiki and InstinctWiki.
 FAKE_SCRIPTS = {
-    "query.py": 'print("# 2 result(s)\\n\\n'
-                '  [wiki-technique] technique-mfma-pipelining: MFMA  (wiki/techniques/mfma-pipelining.md)\\n'
-                '  [pr-source] pr-aiter-12: Fix  (sources/prs/aiter/12.md)")',
-    "get_page.py": 'import sys; print("# page " + sys.argv[1]); sys.exit(3 if sys.argv[1] == "missing" else 0)',
-    "grep_wiki.py": 'print("=== sources/docs/doc-llvm-amdgpu.md (1 match) ===\\n>> 22: global_load_lds")',
+    "rocm-kernel-wiki": {
+        "query.py": 'print("# 2 result(s)\\n\\n'
+                    '  [wiki-technique] technique-mfma-pipelining: MFMA  (wiki/techniques/mfma-pipelining.md)\\n'
+                    '  [pr-source] pr-aiter-12: Fix  (sources/prs/aiter/12.md)")',
+        "get_page.py": GET_PAGE,
+        "grep_wiki.py": 'print("=== sources/docs/doc-llvm-amdgpu.md (1 match) ===\\n>> 22: global_load_lds")',
+    },
+    "instinct-wiki": {
+        "query.py": 'print("# 2 result(s)\\n\\n## MFMA\\n- **id**: `technique-mfma-pipelining`\\n'
+                    '- **type**: `wiki-technique`\\n\\n## Fix\\n- **id**: `pr-aiter-12`\\n- **type**: `source-pr`")',
+        "get_page.py": GET_PAGE,
+        "grep_wiki.py": 'print("# 1 file(s) match\\n\\n## sources/docs/doc-llvm-amdgpu.md  (1 matches)\\n'
+                        '```\\n22: global_load_lds\\n```")',
+    },
 }
 
 
-@pytest.fixture
-def wiki_root(tmp_path):
+@pytest.fixture(params=sorted(FAKE_SCRIPTS))
+def wiki_root(request, tmp_path):
     root = tmp_path / "wiki"
     (root / "scripts").mkdir(parents=True)
-    for name, body in FAKE_SCRIPTS.items():
+    for name, body in FAKE_SCRIPTS[request.param].items():
         (root / "scripts" / name).write_text(body + "\n")
     return root
 
@@ -71,13 +82,15 @@ def run_cli(root: Path, log: Path, *args: str) -> subprocess.CompletedProcess:
 def test_cli_passes_output_through_and_logs_each_call(wiki_root, tmp_path):
     log = tmp_path / "calls.jsonl"
     search = run_cli(wiki_root, log, "search", "mfma pipelining", "--limit", "2")
-    page = run_cli(wiki_root, log, "page", "missing", "--summary")
+    page = run_cli(wiki_root, log, "page", "missing", "--body-only")
     grep = run_cli(wiki_root, log, "grep", "global_load_lds", "--only", "sources")
+    usage = run_cli(wiki_root, log, "page", "--help")
     assert search.returncode == 0 and "technique-mfma-pipelining" in search.stdout
     assert page.returncode == 3 and page.stdout == "# page missing\n"
-    assert grep.returncode == 0 and grep.stdout.startswith("=== sources/docs/doc-llvm-amdgpu.md")
+    assert grep.returncode == 0 and "sources/docs/doc-llvm-amdgpu.md" in grep.stdout
+    assert usage.returncode == 0 and usage.stdout == "# page --help\n"
     records = [json.loads(line) for line in log.read_text().splitlines()]
-    assert [record["command"] for record in records] == ["search", "page", "grep"]
+    assert [record["command"] for record in records] == ["search", "page", "grep", "page"]
     assert records[0]["args"] == ["mfma pipelining", "--limit", "2"]
     assert records[0]["results"] == ["technique-mfma-pipelining", "pr-aiter-12"]
     assert records[1]["exit_code"] == 3 and records[1]["results"] == ["missing"]
@@ -116,4 +129,4 @@ def test_geak_contract_ends_with_the_shared_instructions(wiki_root, tmp_path):
                            candidate=SimpleNamespace(language="hip", initial_state="implemented"))
     bridge = SimpleNamespace(job_path=tmp_path / "job.json", spec=spec)
     assert arena_contract(bridge, sys.executable, text).endswith("\n" + text)
-    assert "ROCm kernel knowledge base" not in arena_contract(bridge, sys.executable)
+    assert "Kernel knowledge base" not in arena_contract(bridge, sys.executable)
