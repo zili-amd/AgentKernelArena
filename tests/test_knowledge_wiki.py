@@ -111,6 +111,8 @@ def test_identity_records_the_checkout_commit_and_instruction_version(wiki_root)
     assert identity["commit"] == git(wiki_root, "rev-parse", "HEAD") and identity["dirty"] is False
     assert identity["instructions_version"] == knowledge_wiki.INSTRUCTIONS_VERSION
     assert len(identity["instructions_sha256"]) == 64
+    delivered = knowledge_wiki.KnowledgeWiki(wiki_root).identity(knowledge_wiki.TOOL_INSTRUCTIONS)
+    assert delivered["instructions_sha256"] != identity["instructions_sha256"]
 
 
 def test_identity_ignores_an_enclosing_repository(tmp_path, wiki_root):

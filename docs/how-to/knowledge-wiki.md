@@ -46,10 +46,21 @@ the variable or these scripts are missing.
 
 ## What agents see
 
-Both adapters append the same instructions, from `src/knowledge_wiki.py`, to the
-task contract they hand to every agent session. Forge appends them to
-`arena_program.md`. GEAK appends them to the Arena contract on every role and
-Workflow call. Agents query from the shell:
+Both adapters append instructions from `src/knowledge_wiki.py` to the task
+contract they hand to every agent session, but the two engines reach the
+knowledge base differently.
+
+Forge's planning roles (dispatch, specialists, synthesis, plan critic and
+supervisor) have no shell. The adapter therefore sets
+`FORGE_KNOWLEDGE_WIKI_ROOT` and `FORGE_KNOWLEDGE_WIKI_LOG`, and the engine serves
+the knowledge base to all of its agents, the implementer and the Analysis Agent
+included, as read-only `mcp__knowledge_wiki__search`, `page`, `grep` and `guide`
+tools (`kernelforge.knowledge.wiki_tool`). `arena_program.md` ends with
+`TOOL_INSTRUCTIONS`, which says the tools are there. A run that enables the key
+on an engine without these tools fails before its first task.
+
+GEAK appends `INSTRUCTIONS` to the Arena contract on every role and Workflow
+call, and its agents query from the shell:
 
 ```text
 <python> src/knowledge_wiki.py --root <checkout> --log <log> search "<question>" [filters]
@@ -59,7 +70,8 @@ Workflow call. Agents query from the shell:
 
 The command passes the knowledge base's own output and exit status through
 unchanged. The instructions name only the options these knowledge bases share
-and point agents at each subcommand's `--help` for the rest.
+and point agents at each subcommand's `--help` for the rest. Forge's tools take
+the same options.
 
 ## Logs and identity
 
@@ -67,10 +79,11 @@ Every query appends one JSON line to `knowledge_wiki_calls.jsonl` in the agent's
 artifact directory. That is the Forge artifact directory next to the task
 workspace, or the hidden GEAK run directory. Each line records the timestamp,
 subcommand, arguments, exit code, duration, output size, and the page IDs or
-files returned.
+files returned. Forge's lines also name the `role` that made the call.
 
 The adapter status records the checkout's commit, whether its tree was dirty,
-and the instructions version and SHA-256. GEAK also writes them to
+and the instructions version and the SHA-256 of the text it delivered; Forge's
+also records `delivery: engine_tools`. GEAK also writes them to
 `knowledge_wiki.json`. The run log repeats them at startup. Compare these values
 across arms before comparing results.
 

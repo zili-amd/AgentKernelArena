@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.metadata
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -54,10 +55,12 @@ def probe() -> dict:
     # adapter asks for the standalone kernel only where the engine accepts that.
     rewrite = cli.main.commands["forge-rewrite-by-flydsl"]
     applyback_optional = "applyback" in {parameter.name for parameter in rewrite.params}
+    # An engine without it would run a knowledge-base arm with no knowledge base.
+    knowledge_wiki_tool = importlib.util.find_spec("kernelforge.knowledge.wiki_tool") is not None
     return {"adapter_api": ADAPTER_API, "version": version,
             "initialization_targets": ["flydsl", "hip", "triton"],
             "backends": sorted(KERNEL_BACKENDS), "rewrite_target": "flydsl",
-            "applyback_optional": applyback_optional}
+            "applyback_optional": applyback_optional, "knowledge_wiki_tool": knowledge_wiki_tool}
 
 
 def main(argv=None):
