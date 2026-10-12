@@ -1,0 +1,7 @@
+triton2triton/geak_eval/L1/refk_fp8_blockwise_mm        cases=  29 median_roofline=     4.31us cases_at_launch_floor=52%  headroom=30.1x selected=True
+hip2hip/others/mla_decode                               cases=   5 median_roofline=     0.55us cases_at_launch_floor=100%  headroom=12903.3x selected=True
+triton2triton/rocmbench/hard/moe_gemm                   cases=  16 median_roofline=   134.24us cases_at_launch_floor=25%  headroom=4.4x selected=True
+triton2triton/rocmbench/hard/test_flashattention_fwd    cases=   6 median_roofline=    24.64us cases_at_launch_floor=33%  headroom=5.4x selected=True
+triton2triton/rocmbench/medium/rmsnorm_fwd              cases= 126 median_roofline=     3.96us cases_at_launch_floor=62%  headroom=1.4x selected=False
+triton2triton/rocmbench/medium/softmax                  cases=  21 median_roofline=     6.33us cases_at_launch_floor=38%  headroom=2.7x selected=False
+triton2triton/geak_eval/L2/topk                         cases=  80 median_roofline=     0.00us cases_at_launch_floor=98%  headroom=1.6x selected=False
