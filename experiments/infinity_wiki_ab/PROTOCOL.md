@@ -1,4 +1,4 @@
-<!-- Copied from the kernel-wiki-ab-protocol skill; SKILL.md in this directory says how to set up and run. -->
+<!-- Copied from the kernel-wiki-ab-protocol skill. skills/infinity-wiki-ab-test and skills/infinity-wiki-ab-setup say how to set up and run. -->
 
 # Kernel wiki A/B protocol
 
@@ -280,7 +280,7 @@ Post-run
 - [ ] Report: within-system deltas with CIs first, then cross-system; three aggregates; cost
 ```
 
-The tooling lives in this directory; `SKILL.md` says how to set up and run:
+The tooling lives in this directory; the two skills under `skills/` say how to set up and run, and `deploy.sh`, `start.sh` and `status.sh` drive a machine over SSH. `make_record.py` fills `TEST_RECORD_TEMPLATE.md` after every pair:
 - `manifest.yaml`: pins, tasks, budgets and the pre-registration.
 - `make_configs.py --aka <checkout> --wiki-root <wiki>`: writes and validates one run config per phase, task and arm.
 - `pack.sh`: builds one pinned git bundle per repository into `dist/`.

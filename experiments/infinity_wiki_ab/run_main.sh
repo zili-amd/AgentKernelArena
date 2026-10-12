@@ -45,3 +45,4 @@ for (( r = 0; r < REPEATS; r++ )); do
     for pid in "${pids[@]}"; do wait "$pid" || failed=$((failed + 1)); done
     echo "$(date -u +%FT%TZ) wave r$r done; $failed pair(s) skipped"
 done
+[[ -n "$DRY_RUN" ]] || python3 "$HERE/make_record.py" "$ROOT" --phase main
