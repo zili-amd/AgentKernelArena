@@ -41,7 +41,8 @@ fi
 
 mkdir -p "$ROOT/src" "$ROOT/logs" "$ROOT/held_out"
 checkout hyperloom "$ROOT/src/hyperloom"
-[[ -f "$DIST/geak.bundle" ]] && checkout geak "$ROOT/src/geak"
+# The pins, not the bundles present, say what this pack needs: dist/ can hold an older pack's files.
+[[ -n "$(pin geak)" ]] && checkout geak "$ROOT/src/geak"
 checkout wiki "$ROOT/src/infinity-wiki"
 # Each checkout gets the experiment files under wiki_ab/ (configs, manifest and
 # tools) because a container only sees its own checkout. Results stay outside it.
