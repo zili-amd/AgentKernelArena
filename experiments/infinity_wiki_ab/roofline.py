@@ -22,7 +22,7 @@ import yaml
 BW = 5.3e12  # MI300X HBM3, bytes/s
 PEAK = {"fp8": 2614.9e12, "bf16": 1307.4e12, "fp16": 1307.4e12, "fp32": 163.4e12}  # dense matrix FLOP/s
 SIZE = {"fp8": 1, "fp16": 2, "bf16": 2, "fp32": 4}
-MIN_HEADROOM = 3.0
+MIN_HEADROOM = 2.0
 LAUNCH_FLOOR_S = 5e-6
 
 
@@ -77,6 +77,30 @@ def topk(p: dict) -> float:
     return (batch * hidden * 4 + batch * k * 12) / BW
 
 
+def rocmbench_gemm(p: dict) -> float:
+    a = p["arguments"]
+    m, n, k = a["M"], a["N"], a["K"]
+    elt_a, elt_b, elt_c = SIZE[a["in_dtype_a_str"]], SIZE[a["in_dtype_b_str"]], SIZE[a["out_dtype_str"]]
+    return bound(2 * m * n * k, m * k * elt_a + k * n * elt_b + m * n * elt_c, PEAK[a["in_dtype_a_str"]])
+
+
+def aiter_gemm_bias(p: dict) -> float:
+    # bf16 x[M,K] @ w[K,N] + bias[N] -> bf16 out[M,N]
+    m, n, k = p["configuration"]
+    return bound(2 * m * n * k, 2 * (m * k + k * n + n + m * n), PEAK["bf16"])
+
+
+def gpumode_matmul(p: dict) -> float:
+    # fp32 a[..., M, K].matmul(b + b) with b[..., K, N]
+    a_shape, b_shape = (item["shape"] for item in p["inputs"])
+    batch, (m, k), n = math.prod(a_shape[:-2]), a_shape[-2:], b_shape[-1]
+    return bound(2 * batch * m * n * k, 4 * batch * (m * k + k * n + m * n), PEAK["fp32"])
+
+
+def gpumode_softmax(p: dict) -> float:
+    return 2 * math.prod(p["inputs"][0]["shape"]) * SIZE["fp32"] / BW
+
+
 MODELS = {
     "triton2triton/geak_eval/L1/refk_fp8_blockwise_mm": refk_fp8_blockwise_mm,
     "hip2hip/others/mla_decode": mla_decode,
@@ -85,6 +109,11 @@ MODELS = {
     "triton2triton/rocmbench/medium/rmsnorm_fwd": rmsnorm_fwd,
     "triton2triton/rocmbench/medium/softmax": softmax,
     "triton2triton/geak_eval/L2/topk": topk,
+    "triton2triton/rocmbench/hard/gemm": rocmbench_gemm,
+    "triton2triton/geak_eval/L3/gemm": aiter_gemm_bias,
+    "triton2triton/rocmbench/medium/naive_softmax": softmax,
+    "hip2hip/gpumode_large/SimpleMatmulModule": gpumode_matmul,
+    "hip2hip/gpumode_large/SoftmaxModule": gpumode_softmax,
 }
 
 
@@ -100,8 +129,9 @@ def main() -> int:
     parser.add_argument("--aka", type=Path, required=True)
     parser.add_argument("--manifest", type=Path, default=Path(__file__).resolve().parent / "manifest.yaml")
     parser.add_argument("--baselines", type=Path, help="JSON from screen_baselines.py")
+    parser.add_argument("--task", action="append", default=[], help="bound these tasks instead of the manifest's")
     args = parser.parse_args()
-    candidates = yaml.safe_load(args.manifest.read_text())["phases"]["screening"]["candidates"]
+    candidates = args.task or yaml.safe_load(args.manifest.read_text())["phases"]["screening"]["candidates"]
     measured = json.loads(args.baselines.read_text()) if args.baselines else {}
     rows = []
     for task in candidates:
