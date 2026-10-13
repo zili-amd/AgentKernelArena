@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 from argparse import Namespace
+import itertools
 import json
 import os
 from pathlib import Path
@@ -87,7 +88,9 @@ class Record:
         self.spec = self.manifest["phases"][phase]
         arms_file = root / "dist" / "arms.txt"
         self.arms = arms_file.read_text().split() if arms_file.is_file() else list(self.manifest["arms"])
-        self.runs = collect_results.runs(root, phase) if (root / "invocations.jsonl").is_file() else []
+        # Only this experiment's arms: the ledger also holds runs of arms an earlier pack ran.
+        self.runs = [run for run in (collect_results.runs(root, phase) if (root / "invocations.jsonl").is_file() else [])
+                     if run["arm"] in self.arms]
         self.records = sorted((collect_results.measure(root, run) for run in self.runs),
                               key=lambda r: (r["task"], r["repeat"], r["arm"]))
         self.tasks = list(self.spec.get("tasks") or sorted({r["task"] for r in self.records}))
@@ -99,12 +102,19 @@ class Record:
                 if cases:
                     self.baselines[record["task"]] = cases
 
+    def wiki_pin(self, arm: str) -> str:
+        value = self.manifest["arms"][arm]["knowledge_wiki"]
+        return value if isinstance(value, str) else "wiki" if value else ""
+
     def what(self) -> dict[str, str]:
         hardware = self.manifest.get("hardware", {})
-        rows = [[f"`{arm}`", self.manifest["arms"][arm]["template"],
-                 "yes" if self.manifest["arms"][arm]["knowledge_wiki"] else "no",
-                 "`knowledge_wiki: {enabled: true}`" if self.manifest["arms"][arm]["knowledge_wiki"] else "none"]
-                for arm in self.arms]
+        rows = []
+        for arm in self.arms:
+            pin = self.wiki_pin(arm)
+            spec = self.manifest["pins"].get(pin, {}) if pin else {}
+            rows.append([f"`{arm}`", self.manifest["arms"][arm]["template"],
+                         f"`{pin}`: {spec.get('branch', '?')} @ `{str(spec.get('commit', ''))[:12]}`" if pin else "none",
+                         f"`knowledge_wiki: {{enabled: true}}`, `src/infinity-{pin.replace('_', '-')}`" if pin else "none"])
         pins_path = self.root / "dist" / "pins.txt"
         pins = [line.split() for line in pins_path.read_text().splitlines()] if pins_path.is_file() else []
         pin_rows = [[name, f"`{commit}`"] for name, commit in pins]
@@ -210,14 +220,17 @@ class Record:
                  "1.0. *Share of ceiling* is speedup / the per-case mean ceiling; *roofline* is Σ bound / Σ final "
                  "time.\n", table(["Task", "Repeat", "Arm", "GPU", "Exit", "Pass", "Speedup", "Share of ceiling",
                                     "Roofline", "Cost", "KB calls", "Audit"], rows)]
-        control, treatment = (self.arms + ["", ""])[:2]
-        summary = collect_results.summarize(self.records, control, treatment)
+        summary = collect_results.summarize(self.records, *(self.arms + ["", ""])[:2])
         parts.append("\n" + table(["Arm", "Runs", "Pass rate", "Mean speedup", "Geomean", "Cost", "KB calls"], [
             [arm, s["runs"], f"{s['pass_rate']:.0%}", f"{s['arithmetic_mean']:.4f}", f"{s['geometric_mean']:.4f}",
              f"${s['cost_usd']:.2f}", s["wiki_calls"]] for arm, s in summary["arms"].items()]))
-        if summary["pairs"]:
+        # Every arm against every later one: with kf first, each wiki arm against kf, then the wiki arms.
+        for control, treatment in itertools.combinations(self.arms, 2):
+            summary = collect_results.summarize(self.records, control, treatment)
+            if not summary["pairs"]:
+                continue
             ci = summary["median_ratio_ci95"]
-            parts.append(f"\n{len(summary['pairs'])} pair(s) of {treatment} over {control}: median ratio "
+            parts.append(f"\n**{treatment} over {control}**: {len(summary['pairs'])} pair(s), median ratio "
                          f"{summary['median_ratio']:.4f}" + (f", bootstrap 95% CI {ci[0]:.4f} to {ci[1]:.4f}" if ci else "")
                          + (f", exact Wilcoxon p = {summary['wilcoxon_p']:.4f}" if summary["wilcoxon_p"] is not None else "")
                          + ".\n\n" + table(["Task", "Repeat", "Ratio"], [[p["task"], p["repeat"], f"{p['ratio']:.4f}"]

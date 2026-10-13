@@ -43,7 +43,10 @@ mkdir -p "$ROOT/src" "$ROOT/logs" "$ROOT/held_out"
 checkout hyperloom "$ROOT/src/hyperloom"
 # The pins, not the bundles present, say what this pack needs: dist/ can hold an older pack's files.
 [[ -n "$(pin geak)" ]] && checkout geak "$ROOT/src/geak"
-checkout wiki "$ROOT/src/infinity-wiki"
+# Pin wiki goes to src/infinity-wiki, pin wiki_branch to src/infinity-wiki-branch; launch_wave.sh maps arms the same way.
+for name in $(awk '$1 ~ /^wiki/ {print $1}' "$DIST/pins.txt"); do
+    checkout "$name" "$ROOT/src/infinity-${name//_/-}"
+done
 # Each checkout gets the experiment files under wiki_ab/ (configs, manifest and
 # tools) because a container only sees its own checkout. Results stay outside it.
 for arm in "${ARMS[@]}"; do

@@ -41,7 +41,10 @@ rm -f "$DIST"/*.bundle "$DIST/pins.txt"
 rm -rf "$DIST/experiment"
 bundle aka "$AKA_SRC" "$(git -C "$AKA_SRC" rev-parse HEAD)"
 bundle hyperloom "$HYPERLOOM_SRC" "$(pin hyperloom)"
-bundle wiki "$WIKI_SRC" "$(pin wiki)"
+# Every wiki pin (wiki, wiki_branch, ...) is a commit of the same repository.
+for key in $(python3 -c "import sys, yaml; print(*[k for k in yaml.safe_load(open(sys.argv[1]))['pins'] if k.startswith('wiki')])" "$HERE/manifest.yaml"); do
+    bundle "$key" "$WIKI_SRC" "$(pin "$key")"
+done
 if [[ " ${ARMS[*]} " == *" geak"* ]]; then
     bundle geak "$GEAK_SRC" "$(pin geak)"
 fi

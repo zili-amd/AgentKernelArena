@@ -32,7 +32,8 @@ for repo in "$AKA_DIR" "$HYPERLOOM_DIR" "$WIKI_DIR"; do
 done
 [[ "$(git -C "$AKA_DIR" branch --show-current)" == "infinity-wiki-AB-test" ]] \
     || echo "WARN: $AKA_DIR is not on infinity-wiki-AB-test; its HEAD is what gets pinned"
-for spec in "hyperloom:$HYPERLOOM_DIR" "wiki:$WIKI_DIR"; do
+wiki_pins="$(python3 -c "import sys, yaml; print(*[k for k in yaml.safe_load(open(sys.argv[1]))['pins'] if k.startswith('wiki')])" "$HERE/manifest.yaml")"
+for spec in "hyperloom:$HYPERLOOM_DIR" $(for key in $wiki_pins; do printf '%s:%s ' "$key" "$WIKI_DIR"; done); do
     name="${spec%%:*}" repo="${spec#*:}" commit="$(pin "${spec%%:*}")"
     if ! git -C "$repo" cat-file -e "$commit^{commit}" 2>/dev/null; then
         echo "  $name: fetching $commit into $repo"

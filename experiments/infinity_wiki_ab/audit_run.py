@@ -14,10 +14,10 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-ARMS = ("kf", "kf_wiki", "geak", "geak_wiki")
-FORGE_ARMS = {"kf", "kf_wiki"}
+ARMS = ("kf", "kf_wiki", "kf_wiki_branch", "geak", "geak_wiki")
+FORGE_ARMS = {"kf", "kf_wiki", "kf_wiki_branch"}
 GEAK_ARMS = {"geak", "geak_wiki"}
-WIKI_ARMS = {"kf_wiki", "geak_wiki"}
+WIKI_ARMS = {"kf_wiki", "kf_wiki_branch", "geak_wiki"}
 
 TEXT_SUFFIXES = {".log", ".jsonl", ".txt", ".out", ".err", ".json"}
 SKIP_DIRS = {".git", "__pycache__", "node_modules", "site-packages", ".aka-pyuserbase"}

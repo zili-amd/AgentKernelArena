@@ -23,14 +23,21 @@ pins:
   # Overlap audit at 0e70cb2: refk_fp8_blockwise_mm and mla_decode are transfer (no page names them);
   # moe_gemm and test_flashattention_fwd are self-reference (kernel-rocmbench-triton-tflops holds AKA's
   # baseline TFLOPs for them, no implementation), so report those two separately.
-  wiki: {repo: AMD-BRAIN-Internal/infinity-wiki, commit: 0e70cb2bcc398c4720c8223426c0bdcd42a0b1aa, variant: v0-unmodified}
+  wiki: {repo: AMD-BRAIN-Internal/infinity-wiki, branch: main, commit: 0e70cb2bcc398c4720c8223426c0bdcd42a0b1aa, variant: v0-unmodified}
+  # main plus 8 gfx942 technique and hardware pages (FP8 FNUZ/OCP, CDNA3 MFMA operand layout, FlashAttention
+  # forward loop, MoE block-aligned grouped GEMM, HIP latency hiding, Triton tuning, XCD remap) and 12 sources.
+  # Overlap audit: no task path, task identifier or task kernel name; its snippets are generic patterns.
+  # The pages target these four operator classes, so this arm tests targeted against general content.
+  wiki_branch: {repo: AMD-BRAIN-Internal/infinity-wiki, branch: gfx942-technique-context, commit: e7f8e84de3f4ec9844edfbdeeaa9a4dc334d0832, variant: v1-gfx942-technique-context}
   model: claude-opus-5  # confirm the gateway's id at the pilot; identical in every arm
 
+# knowledge_wiki names the wiki pin an arm reads (checked out at src/infinity-<pin with - for _>), or false.
 arms:
   kf: {template: forge, knowledge_wiki: false}
-  kf_wiki: {template: forge, knowledge_wiki: true}
+  kf_wiki: {template: forge, knowledge_wiki: wiki}
+  kf_wiki_branch: {template: forge, knowledge_wiki: wiki_branch}
   geak: {template: geak, knowledge_wiki: false}
-  geak_wiki: {template: geak, knowledge_wiki: true}
+  geak_wiki: {template: geak, knowledge_wiki: wiki}
 
 # Only kernels whose baseline is far from the MI300X roofline are experiment
 # subjects: a near-optimal baseline leaves no room for the wiki to show an effect.
@@ -67,7 +74,7 @@ phases:
     # (4x4x4-sized inputs) are launch-bound; fused_moe_mxfp4 needs gfx950.
   main:
     timeout_seconds: 21600
-    repeats: 3
+    repeats: 1
     # Screened on MI300X (5 rounds): headroom vs max(roofline, 5 us) and the relevant wiki pages.
     # rmsnorm_fwd 1.4x, topk 1.6x and softmax 2.7x fall below 3x.
     tasks:
@@ -77,11 +84,11 @@ phases:
       - triton2triton/rocmbench/hard/moe_gemm               # 4.4x; kernel-moe-mxfp4, kernel-gemm-dense-matmul
 
 schedule:
-  # This round runs ARMS="kf kf_wiki" (GEAK refuses to run as root in the runtime).
-  # One wave = four (task, repeat) pairs, two arms each, on GPUs 0-1, 2-3, 4-5 and 6-7.
-  # Arm i of repeat r runs on GPU base + (i + r) % 2, arms in the order listed above.
-  arms_per_pair: 2
-  gpu_bases: [0, 2, 4, 6]
+  # This round runs ARMS="kf kf_wiki kf_wiki_branch" (GEAK refuses to run as root in the runtime).
+  # One wave = two tasks, three arms each, on GPUs 0-2 and 3-5; the four tasks take two waves.
+  # Arm i of task j in repeat r runs on GPU base + (i + r + j) % 3, arms in the order of dist/arms.txt.
+  arms_per_pair: 3
+  gpu_bases: [0, 3]
 
 preregistration:
   primary_metric: >-
@@ -89,9 +96,11 @@ preregistration:
     baseline_time / final_time, baseline = the task's frozen initial candidate.
     A failed, incorrect or unscoreable final (AKA reports 0.0) counts as 1.0.
   primary_comparison: >-
-    Within each system, the paired log ratio log(speedup_wiki / speedup_no_wiki)
-    per (task, repeat): 3 x (number of main tasks) pairs per system.
-  test: Wilcoxon signed-rank on the paired log ratios per system, plus a bootstrap 95% CI of their median.
+    Per task, the paired log ratios log(kf_wiki / kf), log(kf_wiki_branch / kf) and
+    log(kf_wiki_branch / kf_wiki): one repeat, so 4 pairs per comparison.
+  test: >-
+    Descriptive. With 4 pairs the exact two-sided Wilcoxon p cannot fall below 0.125, so
+    report each pair, the median ratio and its bootstrap CI, and claim no significance.
   headline_numbers: quiet re-measurement (>= 5 interleaved rounds per task, same GPU) replaces in-run timings.
   secondary:
     - kf vs geak (biased toward forge by AKA's arithmetic-mean objective; report all three aggregates)
