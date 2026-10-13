@@ -284,7 +284,12 @@ def build_command(plan: dict, context: TaskContext, config: dict, *, gpu_arch: s
                     "--task-type", "repository",
                     "--baseline-json", plan["baseline"], "--program-md-file", plan["program"],
                     "--agent-backend", config["agent_backend"],
-                    "--session-timeout-sec", str(config["session_timeout_seconds"])]
+                    "--session-timeout-sec", str(config["session_timeout_seconds"]),
+                    # The driver is Arena's: it runs the task's own correctness and timing, which the final
+                    # evaluation repeats. Preparation would replace it with one the engine's agent writes whenever
+                    # the task does not time under a CUDA/HIP graph, so each campaign would search against a
+                    # different measurement.
+                    "--no-prepare-task"]
     else:
         command += ["--source-kernel", plan["source"], "--flydsl-kernel-name", plan["anchor"],
                     "--logical-op-name", operator, "--no-prepare-driver",

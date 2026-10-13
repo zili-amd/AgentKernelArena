@@ -231,11 +231,27 @@ candidate got a per-case speedup, so a correct 5.4x candidate was reverted and
 the run delivered 1.00x. An LLM-written driver also differs between arms.
 
 AKA `cda55898` and later answers `--profile-run` with the task's own
-performance action, so the preflight passes and the driver is kept.
+performance action. That was not enough: the preflight also demands CUDA/HIP
+graph replays, so every task that times with CUDA events (mla_decode,
+moe_gemm) still had its driver replaced, differently in each arm. The forge
+adapter therefore passes `--no-prepare-task`: no preflight runs and the Arena
+driver is the one Forge measures with.
 
-Verify: the forge output has `[prepare] task already conforms to the driver
-contract; skipping` and no `[prepare] prepared measurement driver`.
-`audit_run.py` FAILs a run whose `engine.log` shows a replaced driver.
+Verify: the forge output has no `[prepare]` line at all. `audit_run.py` FAILs
+a run whose `engine.log` shows a replaced driver.
+
+### 11. Forge may edit a test-named target (MUST)
+
+ROCmBench keeps each kernel in the `test_*.py` that also holds its tests.
+Forge's workspace policy protects `test_*.py` by name, so before Hyperloom
+`19266e1de` it denied every edit to the FlashAttention forward kernel. One arm
+bound a kernel from another file instead, which delivery does not ship, so it
+scored 1.00x. A declared target now escapes only the test-name patterns.
+AKA's search-time symbol check (`dd4d74a4`) still refuses edits outside the
+editable definitions.
+
+Verify: the forge output has no `DENY edit to protected file` naming a
+declared editable file.
 
 ### Node notes (learned on a shared MI300X node)
 
