@@ -15,6 +15,7 @@ import tempfile
 import uuid
 from urllib.parse import quote
 
+from src.harness_guard import verify_measured_tree
 from src.task_execution import TaskExecutionError, run_action
 from src.task_spec import resolve_task_path
 from agents.forge.task_context import TaskContext, bounded_spec
@@ -94,6 +95,9 @@ def evaluation_workspace(context: TaskContext, plan: dict, engine_root: Path, ro
     installed = install_candidate(context.spec, candidate, engine_root,
                                   reference=Path(plan["template"]))
     try:
+        # Measuring in the engine's tree is only sound while its harness is the task's.
+        verify_measured_tree(Path(plan["template"]), engine_root, context.spec,
+                             ignored=frozenset({".gitignore"}))
         yield engine_root
     finally:
         # A rewrite keeps its candidate under the producer's attempt directory.

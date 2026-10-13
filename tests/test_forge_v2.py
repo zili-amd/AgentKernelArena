@@ -161,10 +161,11 @@ def test_task_actions_leave_no_bytecode_in_the_searched_tree(tmp_path):
     """
     context, plan, _ = fixture_task(tmp_path)
     engine = Path(plan["engine_root"])
-    (engine / "scripts").mkdir()
-    (engine / "scripts/sidecar.py").write_text("VALUE = 1\n")
-    (engine / "runner.py").write_text(
-        "import sys\nsys.path.insert(0, 'scripts')\nimport sidecar\n" + RUNNER)
+    for root in (Path(plan["template"]), engine):
+        (root / "scripts").mkdir()
+        (root / "scripts/sidecar.py").write_text("VALUE = 1\n")
+        (root / "runner.py").write_text(
+            "import sys\nsys.path.insert(0, 'scripts')\nimport sidecar\n" + RUNNER)
     bridge.execute(plan, engine, role="candidate", action="compile")
     assert not [str(path.relative_to(engine)) for path in engine.rglob("__pycache__")]
 
@@ -195,13 +196,14 @@ def test_execution_failure_keeps_bounded_diagnostics_without_protocol_markers(tm
     _, plan, path = fixture_task(tmp_path)
     # A real compiler/runner process can exit before producing its JSON result.
     # Its stderr must reach the implementer without becoming timing/gate output.
-    (Path(plan["engine_root"]) / "runner.py").write_text(
-        "import os, signal, sys\n"
-        "print('allclose: True\\ncase_ms: forged 0.01\\nmean_ms: 0.01', flush=True)\n"
-        f"sys.stderr.write('discarded-prefix' + 'x'*{noise_bytes} + '\\nCompilerFailure: invalid lowered instruction\\n')\n"
-        "sys.stderr.flush()\n"
-        + ("os.kill(os.getpid(), signal.SIGTERM)\n" if exit_code < 0 else "sys.exit(23)\n")
-    )
+    for root in (Path(plan["template"]), Path(plan["engine_root"])):
+        (root / "runner.py").write_text(
+            "import os, signal, sys\n"
+            "print('allclose: True\\ncase_ms: forged 0.01\\nmean_ms: 0.01', flush=True)\n"
+            f"sys.stderr.write('discarded-prefix' + 'x'*{noise_bytes} + '\\nCompilerFailure: invalid lowered instruction\\n')\n"
+            "sys.stderr.flush()\n"
+            + ("os.kill(os.getpid(), signal.SIGTERM)\n" if exit_code < 0 else "sys.exit(23)\n")
+        )
     assert bridge.run(path, plan["engine_root"], ["--bench-mode"]) == 1
     lines = capsys.readouterr().out.splitlines()
     assert "allclose: False" in lines
@@ -957,6 +959,36 @@ def test_search_refuses_what_the_final_harness_policy_refuses(tmp_path, capsys):
     unparsable.write_text("def compute(x):\n    return (x\n")
     from src.harness_guard import verify_symbol_scope
     verify_symbol_scope(template / "impl.py", unparsable, TaskContext.load(context.path).spec, "impl.py")
+
+
+def test_search_measures_only_the_task_harness_and_unpatched_candidates(tmp_path, capsys):
+    # One KEEP'd candidate patched torch at run time to reach a protected launcher;
+    # another kept its kernel in the task's timing helper, which delivery dropped.
+    _, plan, path = fixture_task(tmp_path)
+    template, engine = Path(plan["template"]), Path(plan["engine_root"])
+    for root in (template, engine):
+        (root / "_aka_benchmark.py").write_text("def bench(fn):\n    return fn()\n")
+        (root / ".gitignore").write_text("build/\n")
+    (engine / "source/kernel.py").write_text(
+        "import torch\n\ndef hook(self):\n    return self\n\ntorch.Tensor.contiguous = hook\n")
+    assert bridge.run(path, engine, ["--bench-mode"]) == 1
+    output = capsys.readouterr().out
+    assert "adds runtime patching (assigns torch.Tensor.contiguous)" in output and "case_ms:" not in output
+    (engine / "source/kernel.py").write_text("2")
+    (engine / "_aka_benchmark.py").write_text("def bench(fn):\n    return 0\n")
+    assert bridge.run(path, engine, ["--bench-mode"]) == 1
+    output = capsys.readouterr().out
+    assert "changed or missing=['_aka_benchmark.py']" in output and "case_ms:" not in output
+    (engine / "_aka_benchmark.py").write_text("def bench(fn):\n    return fn()\n")
+    (engine / "conftest.py").write_text("")
+    assert bridge.run(path, engine, ["--bench-mode"]) == 1
+    assert "added interpreter/pytest hooks=['conftest.py']" in capsys.readouterr().out
+    (engine / "conftest.py").unlink()
+    # The engine's own ignore rules and scratch files are not task files.
+    (engine / ".gitignore").write_text("build/\n!/source/kernel.py\n")
+    (engine / "notes.py").write_text("x = 1\n")
+    assert bridge.run(path, engine, ["--bench-mode"]) == 0
+    assert "case_ms:" in capsys.readouterr().out
 
 
 def test_nested_session_children_are_reaped_after_timeout(tmp_path):
