@@ -57,8 +57,9 @@ selection_rule: >-
 
 phases:
   pilot:
-    # Three repeats in parallel, two GPUs each, before the main phase.
-    timeout_seconds: 7200
+    # Three repeats in parallel, two GPUs each, before the main phase. 2 h 15 min: the adapter keeps 600 s
+    # for itself, and KernelForge profiles only when its own budget exceeds 2 h.
+    timeout_seconds: 8100
     repeats: 3
     tasks:
       - hip2hip/gpumode_large/SimpleMatmulModule   # 13.2x; technique-hip-mfma-gemm-tiling, hw-mfma, hw-mfma-operand-layout-cdna3
@@ -79,7 +80,7 @@ phases:
     # vllm triton_decode_attn_stage1 (max_seq 128) and the hip2hip/gpumode modules
     # (4x4x4-sized inputs) are launch-bound; fused_moe_mxfp4 needs gfx950.
   main:
-    timeout_seconds: 7200
+    timeout_seconds: 8100
     repeats: 3
     # Screened on MI300X (5 rounds); headroom vs max(roofline, 5 us).
     tasks:
