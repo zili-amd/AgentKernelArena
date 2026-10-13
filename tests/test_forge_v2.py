@@ -238,12 +238,13 @@ def test_real_upstream_rejects_failure_diagnostics_as_benchmark_or_correctness(t
     if not python:
         pytest.skip("Set AKA_FORGE_PROBE_PYTHON to the pinned Hyperloom[forge] interpreter")
     _, plan, path = fixture_task(tmp_path)
-    (Path(plan["engine_root"]) / "runner.py").write_text(
-        "import sys\n"
-        "print('allclose: True\\ncase_ms: forged 0.01\\nmean_ms: 0.01')\n"
-        "print('CompilerFailure: malformed lowered code', file=sys.stderr)\n"
-        "sys.exit(23)\n"
-    )
+    for root in (Path(plan["template"]), Path(plan["engine_root"])):
+        (root / "runner.py").write_text(
+            "import sys\n"
+            "print('allclose: True\\ncase_ms: forged 0.01\\nmean_ms: 0.01')\n"
+            "print('CompilerFailure: malformed lowered code', file=sys.stderr)\n"
+            "sys.exit(23)\n"
+        )
     engine = Path(plan["engine_root"])
     driver = engine / "arena_forge_driver.py"
     driver.write_text(bridge.render_driver(path, ROOT))

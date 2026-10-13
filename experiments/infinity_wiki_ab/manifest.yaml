@@ -16,9 +16,10 @@ hardware:
 pins:
   # The commit pack.sh runs from (dist/pins.txt records it); this file lives in that commit.
   agentkernelarena: {repo: AMD-AGI/AgentKernelArena, branch: infinity-wiki-AB-test}
-  # main f2b32cdc9 plus the read-only knowledge base tools for every forge role, and declared test_*.py
-  # targets left editable (ROCmBench colocates a kernel with its tests).
-  hyperloom: {repo: AMD-AGI/Hyperloom, branch: forge-knowledge-wiki-tool, commit: 19266e1de1d54272093ed23fce0767220c9597d1}
+  # main 1a444f6b8 plus the read-only knowledge base tools for every forge role, and declared test_*.py
+  # targets left editable (ROCmBench colocates a kernel with its tests). The previous round ran the same two
+  # commits on main f2b32cdc9 (branch forge-knowledge-wiki-tool, 19266e1de).
+  hyperloom: {repo: AMD-AGI/Hyperloom, branch: forge-knowledge-wiki-tool-main, commit: c4a848920e2d57b95387b12c77bdb0541fa783ce}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
   # 20 curated pages, 147 source pages (18 official AMD docs), a SKILL.md that matches the corpus.
   # Overlap audit at 0e70cb2: refk_fp8_blockwise_mm and mla_decode are transfer (no page names them);
