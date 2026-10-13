@@ -1,0 +1,15 @@
+# Rewrite-and-tune screen, second batch: single-kernel tasks whose launcher is
+# protected today. A variant would declare the launcher (and its config helper)
+# editable next to the kernel; the reference, inputs and timing stay protected.
+triton2triton/rocmbench/hard/gemm
+triton2triton/geak_eval/L3/gemm
+triton2triton/geak_eval/L3/gemm_a16w16_atomic
+triton2triton/rocmbench/hard/test_block_pointer_matmul
+triton2triton/rocmbench/hard/triton_multreduce_matmul_kernel
+triton2triton/rocmbench/medium/test_cast_matmul
+triton2triton/rocmbench/medium/naive_softmax
+triton2triton/geak_eval/L3/fused_rms_fp8
+triton2triton/geak_eval/L2/lean_atten_paged
+triton2triton/geak_eval/L1/moe_routing_sigmoid_top1
+triton2triton/rocmbench/medium/test_triton_sort
+triton2triton/geak_eval/L3/fused_qk_rope_cache_mla
