@@ -450,12 +450,13 @@ _LIBRARY_OPERATORS = re.compile(
     r"|\.(?:matmul|mm|bmm|addmm|baddbmm|softmax|log_softmax)\s*\(",
     re.IGNORECASE)
 _CXX_COMMENTS = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
+_CALL_PUNCTUATION = re.compile(r"[\s(]")
 
 
 def library_delegation_sites(source: str) -> Counter:
     """Count the library operator calls in C++/HIP ``source``, ignoring comments."""
     code = _CXX_COMMENTS.sub(" ", source)
-    return Counter(f"calls {re.sub(r'[\s(]', '', match.group(0)).lower()}"
+    return Counter("calls " + _CALL_PUNCTUATION.sub("", match.group(0)).lower()
                    for match in _LIBRARY_OPERATORS.finditer(code))
 
 
