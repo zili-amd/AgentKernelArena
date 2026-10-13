@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Launch the four arms of one (task, repeat) pair together on four GPUs.
+# Launch the ARMS of one (task, repeat) together, one GPU each.
 #   launch_wave.sh ROOT PHASE TASK REPEAT GPU_BASE [--dry-run]
-# Arm i runs on GPU GPU_BASE + (i + REPEAT) % N for N launched arms (Latin square across repeats).
+# Arm i runs on GPU GPU_BASE + (i + REPEAT + ROTATE) % N for N launched arms (Latin square across repeats).
 # Credentials come from the caller's environment and are forwarded by name only.
 set -euo pipefail
 
@@ -9,6 +9,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(realpath -m "${1:?usage: launch_wave.sh ROOT PHASE TASK REPEAT GPU_BASE [--dry-run]}")"
 PHASE="${2:?phase}"; TASK="${3:?task}"; REPEAT="${4:?repeat}"; GPU_BASE="${5:?gpu base}"
 DRY_RUN=0; [[ "${6:-}" == "--dry-run" ]] && DRY_RUN=1
+# Extra GPU rotation, so that tasks sharing a repeat do not all put each arm in the same position.
+ROTATE="${ROTATE:-0}"
 # ARMS="kf" launches a subset (e.g. reference runs without the wiki).
 read -r -a ARMS <<< "${ARMS:-kf kf_wiki}"
 SLUG="${TASK//\//__}"
@@ -34,7 +36,7 @@ if [[ "$DRY_RUN" == "0" ]]; then
         || { echo "ERROR: no LLM gateway credentials in the environment" >&2; exit 1; }
     busy="$(rocm-smi --showpidgpus 2>/dev/null | awk '/is using [1-9]/ {grab=1; next} grab && /^[0-9 ]+$/ {print; grab=0}' | tr ' ' '\n' | sort -u)"
     for i in "${!ARMS[@]}"; do
-        gpu=$(( GPU_BASE + (i + REPEAT) % ${#ARMS[@]} ))
+        gpu=$(( GPU_BASE + (i + REPEAT + ROTATE) % ${#ARMS[@]} ))
         if [[ "${ALLOW_BUSY:-0}" != "1" ]] && grep -qx "$gpu" <<< "$busy"; then
             echo "ERROR: GPU $gpu is in use by another process (rocm-smi --showpidgpus); ALLOW_BUSY=1 overrides" >&2
             exit 1
@@ -51,7 +53,7 @@ record() {  # one JSON line per event; all values are plain tokens
 pids=()
 for i in "${!ARMS[@]}"; do
     arm="${ARMS[$i]}"
-    gpu=$(( GPU_BASE + (i + REPEAT) % ${#ARMS[@]} ))
+    gpu=$(( GPU_BASE + (i + REPEAT + ROTATE) % ${#ARMS[@]} ))
     tag="${PHASE}-${TASK##*/}-r${REPEAT}-${arm}"
     env_args=()
     for name in "${UNSET[@]}"; do env_args+=(-u "$name"); done
@@ -67,10 +69,12 @@ for i in "${!ARMS[@]}"; do
                SSL_CERT_FILE=/workspace/wiki_ab/ca-certificates.crt
                REQUESTS_CA_BUNDLE=/workspace/wiki_ab/ca-certificates.crt)
     case "$arm" in
-        kf|kf_wiki) env_args+=(HYPERLOOM_ROOT="$ROOT/src/hyperloom") ;;
-        geak|geak_wiki) env_args+=(GEAK_HOME="$ROOT/src/geak") ;;
+        kf*) env_args+=(HYPERLOOM_ROOT="$ROOT/src/hyperloom") ;;
+        geak*) env_args+=(GEAK_HOME="$ROOT/src/geak") ;;
     esac
-    [[ "$arm" == *_wiki ]] && env_args+=(AKA_KNOWLEDGE_WIKI_ROOT="$ROOT/src/infinity-wiki")
+    wiki_pin="$(python3 -c "import sys, yaml; v = yaml.safe_load(open(sys.argv[1]))['arms'][sys.argv[2]]['knowledge_wiki']
+print(v if isinstance(v, str) else 'wiki' if v else '')" "$HERE/manifest.yaml" "$arm")"
+    [[ -n "$wiki_pin" ]] && env_args+=(AKA_KNOWLEDGE_WIKI_ROOT="$ROOT/src/infinity-${wiki_pin//_/-}")
     command=(make docker-run CONFIG="wiki_ab/configs/$PHASE/$SLUG/$arm.yaml" RUN_ARGS="--run-suffix $tag")
     if [[ "$DRY_RUN" == "1" ]]; then
         printf 'GPU %s  %-9s cd %s && env %s %s\n' "$gpu" "$arm" "$ROOT/aka-$arm" "${env_args[*]}" "${command[*]}"

@@ -23,7 +23,8 @@ Ask everything in one round (AskQuestion where available), offering these defaul
 
 | Question | Default |
 |---|---|
-| What to test | `pilot`: one task, both arms, 2 h, one pair. `main`: the four main tasks × 3 repeats × both arms × 6 h, three waves of four pairs, about 19 h on 8 GPUs |
+| What to test | `pilot`: one task, the arms side by side, 2 h. `main`: the manifest's main tasks × arms × repeats at 6 h; as pinned, 4 tasks × 3 arms (`kf`, `kf_wiki` on wiki main, `kf_wiki_branch` on the wiki branch) × 1 repeat, two waves of two tasks on 6 GPUs, about 12 h |
+| Arms | `--arms "kf kf_wiki kf_wiki_branch"` for `deploy.sh`; `knowledge_wiki` in `manifest.yaml` names each arm's wiki pin |
 | Test machine | SSH target `USER@HOST` and an SSH key file; key-based login without a prompt |
 | Working directory on it | `/root/wiki-ab` |
 | Credentials | a local `.env` with `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN`, and `ANTHROPIC_CUSTOM_HEADERS` if the gateway needs it |
