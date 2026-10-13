@@ -5,7 +5,9 @@ The originals measure 4x4 to 128x128 inputs, where every case sits at the launch
 floor and no rewrite can show. A variant keeps the task's kernel, reference,
 tolerances and timing code and replaces only the case list: the configs in
 get_inputs() of both reference modules, and workload.json, which the evaluator
-checks against them case by case.
+checks against them case by case. The README also states that the operator must
+stay in the candidate's own kernels, which the harness guard enforces; at these
+sizes a library call would otherwise be the fastest candidate.
     make_variants.py [--aka PATH] [--force]
 """
 from __future__ import annotations
@@ -42,6 +44,12 @@ VARIANTS = {
     ]),
 }
 CONFIGS_BLOCK = re.compile(r"(    configs = \[\n).*?(\n    \]\n)", re.DOTALL)
+PROTECTED_CODE_RULE = "HIP stream. Do not load or call protected baseline/reference code from the candidate.\n"
+OWN_KERNELS_RULE = (
+    "Compute the operator in HIP kernels the candidate defines and launches. Do not call\n"
+    "a BLAS or GEMM library (hipBLAS, hipBLASLt, rocBLAS, Tensile), MIOpen, or a\n"
+    "PyTorch/ATen matrix-product or softmax operator; PyTorch may only allocate\n"
+    "outputs, check inputs, and make views or contiguous copies.\n")
 
 
 def contiguous_stride(shape: list[int]) -> list[int]:
@@ -80,7 +88,9 @@ def write_variant(aka: Path, source: str, target: str, cases: list[tuple], force
     text, count = re.subn(r"\*\*\d+ cases\*\*", f"**{len(cases)} cases**", readme.read_text())
     if count == 0:
         raise ValueError(f"{readme}: no case count to update")
-    readme.write_text(text)
+    if PROTECTED_CODE_RULE not in text:
+        raise ValueError(f"{readme}: no protected-code rule to extend")
+    readme.write_text(text.replace(PROTECTED_CODE_RULE, PROTECTED_CODE_RULE + OWN_KERNELS_RULE, 1))
     return dst
 
 

@@ -187,7 +187,10 @@ inspection (`sys._getframe`, `inspect.currentframe`), reads of code-object and
 frame internals (`__code__`, `__globals__`, `f_back`, ...), assignments to an
 imported module or object (`torch.Tensor.contiguous = ...`) or through an
 attribute chain (`t.Tensor.contiguous = ...`), and rebinding an imported name.
-Sites the starting file already has stay allowed. The guard reports its
+Every editable C/C++/HIP file may not add library operator calls outside
+comments: hipBLAS, hipBLASLt, rocBLAS, Tensile or MIOpen calls, and ATen/torch
+matrix-product or softmax operators (`at::matmul`, `torch::mm`, `.bmm(`,
+`.softmax(`, ...). Sites the starting file already has stay allowed. The guard reports its
 effective policy in the validator context. It is a structural integrity check,
 not isolation of arbitrary Python code; reference/test manipulation remains
 forbidden and subject to semantic review.
