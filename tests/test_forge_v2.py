@@ -373,6 +373,23 @@ def test_tree_bundle_propagates_deletions_but_not_harness(tmp_path):
     assert (context.workspace / "source/new.py").read_text() == "3"
 
 
+def test_search_install_refuses_added_library_calls_in_hip_files(tmp_path):
+    # A HIP GEMM analysis proposed handing the product to hipBLASLt.
+    context, plan, _ = fixture_task(tmp_path)
+    original = "torch::Tensor forward(torch::Tensor a) {\n    return launch(a);\n}\n"
+    (context.workspace / "source/kernel.hip").write_text(original)
+    config = context.spec.to_mapping()
+    config["candidate"]["editable"].append("source/kernel.hip")
+    spec = TaskSpec.from_mapping(config, task_id=context.spec.task_id)
+    engine = Path(plan["engine_root"])
+    (engine / "source/kernel.hip").write_text(original.replace("launch(a)", "at::matmul(a, a)"))
+    with pytest.raises(RuntimeError, match=r"adds library operator calls \(calls at::matmul\)"):
+        install_candidate(spec, engine, context.workspace)
+    assert (context.workspace / "source/kernel.hip").read_text() == original
+    (engine / "source/kernel.hip").write_text(original.replace("launch(a)", "launch_tiled(a)"))
+    install_candidate(spec, engine, context.workspace)
+
+
 def test_colocated_harness_protected_during_install(tmp_path):
     context, plan, _ = fixture_task(tmp_path)
     original = 'def compute():\n    return 1\n\ndef test_compute():\n    assert compute() == 1\n'

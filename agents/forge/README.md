@@ -217,7 +217,7 @@ which lives in a temporary directory removed when its measurement ends; the
 candidate is measured in place, so a campaign makes no copy per assessment.
 Because the search's numbers come from that tree, each candidate assessment
 first applies the final evaluation's candidate policy, including its
-runtime-patching rule, and refuses to measure when a protected task file (a
+runtime-patching and library-call rules, and refuses to measure when a protected task file (a
 runner, reference or timing helper such as `_aka_benchmark.py`) differs from the
 task package, or when the tree gained a `conftest.py`, `sitecustomize.py`,
 `usercustomize.py` or `.pth` file. The engine's `.gitignore` and its own

@@ -9,6 +9,10 @@ Match the argument order used by `pytorch_code_functional/py_3267_SimpleMatmulMo
 structure, shapes, dtypes, devices, parameter state, and numerical semantics.
 GPU work must run through the submitted HIP extension, with the current PyTorch
 HIP stream. Do not load or call protected baseline/reference code from the candidate.
+Compute the operator in HIP kernels the candidate defines and launches. Do not call
+a BLAS or GEMM library (hipBLAS, hipBLASLt, rocBLAS, Tensile), MIOpen, or a
+PyTorch/ATen matrix-product or softmax operator; PyTorch may only allocate
+outputs, check inputs, and make views or contiguous copies.
 PyTorch/ROCm, PyYAML, Ninja, and compiler headers are runtime dependencies
 provided by the selected image.
 

@@ -117,4 +117,10 @@ preregistration:
   exclusion_rule: a run that fails audit_run.py (exit 1) is excluded and rerun with the same GPU slot.
 
 invocations: []
-exclusions: []
+exclusions:
+  - runs: pilot hip2hip/gpumode_large/SimpleMatmulModule r0-r2, kf and kf_wiki (started 2026-10-13 20:55 UTC)
+    stopped: 2026-10-13 21:45 UTC, before any KEEP
+    reason: >-
+      The task did not forbid library delegation, and one kf analysis proposed handing the GEMM
+      to hipBLASLt. The README now requires candidate-owned kernels and the harness guard refuses
+      added BLAS/MIOpen/ATen operator calls; all six runs restart from scratch.

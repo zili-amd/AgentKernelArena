@@ -9,7 +9,7 @@ import re
 import shutil
 import subprocess
 
-from src.harness_guard import verify_no_runtime_patching, verify_symbol_scope
+from src.harness_guard import verify_candidate_additions, verify_symbol_scope
 from src.task_spec import EditScope, TaskSpec, resolve_task_path
 
 _TRANSIENT = {".git", "__pycache__", ".pytest_cache", "forge_experiments", ".forge_rewrite"}
@@ -152,8 +152,7 @@ def install_candidate(spec: TaskSpec, source: Path, destination: Path,
             # The search installs every candidate here, so it must refuse what the final evaluation refuses.
             verify_symbol_scope(original, files[scope.path], spec, scope.path)
     for relative, path in files.items():
-        if path.suffix == ".py":
-            verify_no_runtime_patching(resolve_task_path(origin, relative), path, relative)
+        verify_candidate_additions(resolve_task_path(origin, relative), path, relative)
     for relative in files:
         resolve_task_path(destination, relative)
     # Propagate declared-tree deletions too, so a removed helper cannot survive

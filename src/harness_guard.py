@@ -17,6 +17,7 @@ from collections import Counter
 import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
+import re
 from typing import Iterable
 
 import yaml
@@ -63,8 +64,9 @@ class WorkspaceSnapshot:
     digests: dict[str, str]
     task_spec: TaskSpec | None = None
     initial_symbols: dict[str, frozenset[str]] = field(default_factory=dict)
-    # Runtime-patching sites of each editable Python file before the agent ran;
-    # None when an older snapshot did not record them.
+    # Runtime-patching sites of each editable Python file and library operator
+    # calls of each editable C++/HIP file before the agent ran; None when an
+    # older snapshot did not record them.
     initial_patching: dict[str, dict[str, int]] | None = None
 
 
@@ -438,35 +440,65 @@ def runtime_patching_sites(source: str) -> Counter:
     return sites
 
 
+# A C++/HIP candidate is measured as the kernels it writes, so handing the
+# operator to a prebuilt library kernel measures that library instead. Only
+# calls the task's own starting file lacks are refused.
+_CXX_SUFFIXES = frozenset({".hip", ".cu", ".cuh", ".cpp", ".cc", ".cxx", ".h", ".hh", ".hpp"})
+_LIBRARY_OPERATORS = re.compile(
+    r"\b(?:hipblas|rocblas|tensile|miopen)\w*"
+    r"|\b(?:at|torch)::(?:matmul|mm|bmm|addmm|baddbmm|addbmm|linear|einsum|softmax|log_softmax|_softmax)\b"
+    r"|\.(?:matmul|mm|bmm|addmm|baddbmm|softmax|log_softmax)\s*\(",
+    re.IGNORECASE)
+_CXX_COMMENTS = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
+
+
+def library_delegation_sites(source: str) -> Counter:
+    """Count the library operator calls in C++/HIP ``source``, ignoring comments."""
+    code = _CXX_COMMENTS.sub(" ", source)
+    return Counter(f"calls {re.sub(r'[\s(]', '', match.group(0)).lower()}"
+                   for match in _LIBRARY_OPERATORS.finditer(code))
+
+
 def _patching_sites_of(path: Path) -> Counter | None:
     try:
-        return runtime_patching_sites(path.read_text(encoding="utf-8"))
+        if path.suffix == ".py":
+            return runtime_patching_sites(path.read_text(encoding="utf-8"))
+        if path.suffix in _CXX_SUFFIXES:
+            return library_delegation_sites(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, SyntaxError):
         # The task's own compile action reports an unreadable candidate.
-        return None
+        pass
+    return None
 
 
 def _reject_added_patching(relative: str, current: Counter, initial: Counter) -> None:
     added = sorted(set((current - initial).elements()))
-    if added:
+    if not added:
+        return
+    if Path(relative).suffix == ".py":
         raise RuntimeError(f"Protected test/harness policy rejected {relative}: it adds runtime patching "
                            f"({'; '.join(added[:6])}); a candidate may not rewrite modules, frames or "
                            "other code at run time")
+    raise RuntimeError(f"Protected test/harness policy rejected {relative}: it adds library operator calls "
+                       f"({'; '.join(added[:6])}); a candidate must compute the operator in kernels it "
+                       "defines, not in BLAS, MIOpen or PyTorch operators")
 
 
-def _editable_python_files(root: Path, spec: TaskSpec) -> list[str]:
+def _editable_checked_files(root: Path, spec: TaskSpec) -> list[str]:
     files = []
     for edit in spec.candidate.editable:
         if edit.scope == "tree":
-            files.extend(path.relative_to(root).as_posix() for path in sorted((root / edit.path).rglob("*.py"))
-                         if not set(path.relative_to(root).parts) & _V2_RUNTIME_DIRS)
-        elif edit.path.endswith(".py") and (root / edit.path).is_file():
+            files.extend(path.relative_to(root).as_posix() for path in sorted((root / edit.path).rglob("*"))
+                         if (path.suffix == ".py" or path.suffix in _CXX_SUFFIXES) and path.is_file()
+                         and not set(path.relative_to(root).parts) & _V2_RUNTIME_DIRS)
+        elif (Path(edit.path).suffix == ".py" or Path(edit.path).suffix in _CXX_SUFFIXES) \
+                and (root / edit.path).is_file():
             files.append(edit.path)
     return files
 
 
-def verify_no_runtime_patching(original: Path | None, candidate: Path, relative: str) -> None:
-    """Apply the final evaluation's runtime-patching policy to one candidate file."""
+def verify_candidate_additions(original: Path | None, candidate: Path, relative: str) -> None:
+    """Apply the final evaluation's runtime-patching and library-call policy to one candidate file."""
     current = _patching_sites_of(candidate)
     if current is not None:
         initial = _patching_sites_of(original) if original is not None and original.is_file() else None
@@ -829,7 +861,7 @@ def snapshot_workspace_harness(
         if missing:
             raise RuntimeError(f"Task inputs missing before agent execution: {missing}")
         digests = _v2_digests(root, spec, protected, initial_symbols)
-        patching = {relative: dict(sites) for relative in _editable_python_files(root, spec)
+        patching = {relative: dict(sites) for relative in _editable_checked_files(root, spec)
                     if (sites := _patching_sites_of(root / relative)) is not None}
         return WorkspaceSnapshot(root, digests, spec, initial_symbols, patching)
     task_inputs = (
@@ -888,7 +920,7 @@ def verify_workspace_harness(snapshot: WorkspaceSnapshot, logger=None, *, discar
         current = _scan()
 
     if snapshot.task_spec is not None and snapshot.initial_patching is not None:
-        for relative in _editable_python_files(snapshot.root, snapshot.task_spec):
+        for relative in _editable_checked_files(snapshot.root, snapshot.task_spec):
             sites = _patching_sites_of(snapshot.root / relative)
             if sites is not None:
                 _reject_added_patching(relative, sites, Counter(snapshot.initial_patching.get(relative, {})))

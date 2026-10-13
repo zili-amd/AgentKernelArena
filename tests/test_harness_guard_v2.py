@@ -121,6 +121,53 @@ def test_runtime_patching_the_task_already_had_stays_allowed(tmp_path):
     verify_workspace_harness(replace(before, initial_patching=None))
 
 
+HIP_KERNEL = """#include <torch/extension.h>
+// A reference could call at::matmul(a, b); this file does not.
+torch::Tensor forward(torch::Tensor a, torch::Tensor b) {
+    auto out = torch::empty({a.size(0), b.size(1)}, a.options());
+    auto scale = at::bmm(a, b);
+    launch_gemm(a.contiguous(), b.contiguous(), out);
+    return out;
+}
+"""
+
+
+def hip_workspace(tmp_path):
+    root = tmp_path / "workspace"
+    (root / "hip").mkdir(parents=True)
+    source = root / "hip/kernel.hip"
+    source.write_text(HIP_KERNEL)
+    config = {"schema_version": 2, "candidate": {"language": "hip", "editable": ["hip/kernel.hip"]},
+              "evaluation": {"runner": ["python3", "evaluate.py"]}}
+    (root / "config.yaml").write_text(yaml.safe_dump(config))
+    (root / "evaluate.py").write_text("# protected custom evaluation runner\n")
+    return root, source
+
+
+@pytest.mark.parametrize("delegation", [
+    "    return at::matmul(a, b * 2);\n",
+    "    return a.mm(b) * 2;\n",
+    "    hipblasSgemm(handle, HIPBLAS_OP_N, HIPBLAS_OP_N, m, n, k, &alpha, x, m, y, k, &beta, z, m);\n",
+    "    return torch::softmax(a, -1);\n",
+])
+def test_a_hip_candidate_may_not_add_library_operator_calls(tmp_path, delegation):
+    root, source = hip_workspace(tmp_path)
+    before = snapshot_workspace_harness(root)
+    source.write_text(HIP_KERNEL.replace("    return out;\n", delegation))
+    with pytest.raises(RuntimeError, match="adds library operator calls"):
+        verify_workspace_harness(before)
+
+
+def test_library_calls_the_hip_task_already_had_stay_allowed(tmp_path):
+    root, source = hip_workspace(tmp_path)
+    before = snapshot_workspace_harness(root)
+    source.write_text(HIP_KERNEL.replace("launch_gemm(", "// at::matmul is slower here\n    launch_tiled_gemm("))
+    verify_workspace_harness(before)
+    source.write_text(HIP_KERNEL.replace("at::bmm(a, b);", "at::bmm(a, b);\n    auto again = at::bmm(b, a);"))
+    with pytest.raises(RuntimeError, match=r"adds library operator calls \(calls at::bmm\)"):
+        verify_workspace_harness(before)
+
+
 def test_new_task_config_cannot_redefine_the_protected_boundary(tmp_path):
     root, source = workspace(tmp_path, symbols=True)
     before = snapshot_workspace_harness(root)
