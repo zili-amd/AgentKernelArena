@@ -1,3 +1,4 @@
+from dataclasses import replace
 import logging
 import shutil
 
@@ -85,6 +86,39 @@ def test_tree_edit_does_not_override_harness_file_protection(tmp_path):
     harness.write_text("# weaker evaluation\n")
     with pytest.raises(RuntimeError, match="check_harness.py"):
         verify_workspace_harness(before)
+
+
+@pytest.mark.parametrize("patch", [
+    "def compute():\n    globals()['math'] = None\n    return 1\n",
+    "def compute():\n    math.sqrt = abs\n    return 1\n",
+    "def compute():\n    import sys\n    return sys._getframe(1).f_code\n",
+    "def compute():\n    return reference.__code__\n",
+    "def compute():\n    alias = {'m': math}['m']\n    alias.sqrt.__doc__ = ''\n    return 1\n",
+    "def compute():\n    setattr(math, 'pi', 3)\n    return 1\n",
+])
+def test_a_candidate_may_not_add_runtime_patching(tmp_path, patch):
+    # A delivered refk candidate swapped the module's torch for a proxy and
+    # patched Tensor.contiguous, so the protected launcher ran its fused kernel.
+    root, source = workspace(tmp_path)
+    before = snapshot_workspace_harness(root)
+    source.write_text(source.read_text().replace("def compute(): return 1\n", patch))
+    with pytest.raises(RuntimeError, match="adds runtime patching"):
+        verify_workspace_harness(before)
+
+
+def test_runtime_patching_the_task_already_had_stays_allowed(tmp_path):
+    root, source = workspace(tmp_path, symbols=True, helpers=True)
+    source.write_text(source.read_text() + "def setup(obj):\n    setattr(obj, 'ready', True)\n")
+    before = snapshot_workspace_harness(root)
+    original = source.read_text()
+    source.write_text(original.replace("def compute(): return 1", "def compute(): return 2"))
+    verify_workspace_harness(before)
+    source.write_text(original.replace("def compute(): return 1", "def compute(): return helper()")
+                      + "def helper():\n    setattr(math, 'pi', 3)\n    return 1\n")
+    with pytest.raises(RuntimeError, match=r"adds runtime patching \(calls setattr\(\)\)"):
+        verify_workspace_harness(before)
+    # A snapshot saved before sites were recorded cannot tell added ones apart.
+    verify_workspace_harness(replace(before, initial_patching=None))
 
 
 def test_new_task_config_cannot_redefine_the_protected_boundary(tmp_path):

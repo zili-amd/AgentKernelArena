@@ -215,6 +215,13 @@ hashes are preserved in the fresh Forge artifact directory; old experiment
 directories are never removed. The only disposable copy is the baseline tree,
 which lives in a temporary directory removed when its measurement ends; the
 candidate is measured in place, so a campaign makes no copy per assessment.
+Because the search's numbers come from that tree, each candidate assessment
+first applies the final evaluation's candidate policy, including its
+runtime-patching rule, and refuses to measure when a protected task file (a
+runner, reference or timing helper such as `_aka_benchmark.py`) differs from the
+task package, or when the tree gained a `conftest.py`, `sitecustomize.py`,
+`usercustomize.py` or `.pth` file. The engine's `.gitignore` and its own
+scratch files are not task files.
 Each driver invocation reaps its own descendants. Optimize and rewrite also
 run the native CLI beneath the standard-library-only [process supervisor](process_tree.py).
 It reaps the complete descendant tree on normal exit, failure or timeout,

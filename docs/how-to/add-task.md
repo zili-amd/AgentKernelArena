@@ -180,7 +180,14 @@ protected function definitions. Existing editable non-entrypoint configuration
 helpers must pass a restricted body check: configuration data/local assignments,
 returns, and branches using protected predicates or supported configuration
 operations. Initial aliases, kernel entrypoints, and newly introduced factories
-do not gain permission to run at definition time. The guard reports its
+do not gain permission to run at definition time. Every editable Python file,
+whatever its scope, also may not add runtime patching: calls to `globals()`,
+`vars()`, `setattr`/`delattr`, `exec`/`eval`/`__import__`, `importlib` or frame
+inspection (`sys._getframe`, `inspect.currentframe`), reads of code-object and
+frame internals (`__code__`, `__globals__`, `f_back`, ...), assignments to an
+imported module or object (`torch.Tensor.contiguous = ...`) or through an
+attribute chain (`t.Tensor.contiguous = ...`), and rebinding an imported name.
+Sites the starting file already has stay allowed. The guard reports its
 effective policy in the validator context. It is a structural integrity check,
 not isolation of arbitrary Python code; reference/test manipulation remains
 forbidden and subject to semantic review.

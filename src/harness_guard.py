@@ -13,6 +13,7 @@ discarded rather than treated as tampering; see ``verify_workspace_harness``.
 from __future__ import annotations
 
 import ast
+from collections import Counter
 import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -62,6 +63,9 @@ class WorkspaceSnapshot:
     digests: dict[str, str]
     task_spec: TaskSpec | None = None
     initial_symbols: dict[str, frozenset[str]] = field(default_factory=dict)
+    # Runtime-patching sites of each editable Python file before the agent ran;
+    # None when an older snapshot did not record them.
+    initial_patching: dict[str, dict[str, int]] | None = None
 
 
 _V2_OUTPUT_NAMES = {
@@ -369,6 +373,130 @@ def verify_symbol_scope(original: Path, candidate: Path, spec: TaskSpec, relativ
             != _v2_symbol_digest(original, edit, initial, entrypoints)):
         raise RuntimeError(f"Protected test/harness policy rejected {candidate.name}: "
                            "it changes statements outside its editable definitions")
+
+
+# Ways Python code can rewrite other code at run time. A kernel, its launcher and
+# their helpers need none of them, and a candidate that adds one can make
+# protected code (a launcher, a reference, the timing loop) run differently
+# from how it reads. A site the task's own starting file has stays allowed.
+_REFLECTIVE_CALLS = frozenset({"globals", "vars", "setattr", "delattr", "exec", "eval", "__import__"})
+_REFLECTIVE_IMPORTS = frozenset({"sys._getframe", "inspect.currentframe", "inspect.stack",
+                                 "inspect.getouterframes", "importlib.import_module", "importlib.reload"})
+_REFLECTIVE_ATTRIBUTES = frozenset({"__code__", "__globals__", "__closure__", "__builtins__", "__dict__",
+                                    "__setattr__", "__delattr__", "f_back", "f_code", "f_globals",
+                                    "f_locals", "f_builtins", "tb_frame", "gi_frame"})
+
+
+def _store_targets(node: ast.AST):
+    if isinstance(node, (ast.Tuple, ast.List)):
+        for item in node.elts:
+            yield from _store_targets(item)
+    elif isinstance(node, ast.Starred):
+        yield from _store_targets(node.value)
+    else:
+        yield node
+
+
+def runtime_patching_sites(source: str) -> Counter:
+    """Count the constructs in ``source`` through which code can patch other code."""
+    tree = ast.parse(source)
+    # Function-local imports bind modules too.
+    bindings = _import_bindings(ast.Module(body=[node for node in ast.walk(tree)
+                                                 if isinstance(node, (ast.Import, ast.ImportFrom))],
+                                           type_ignores=[]))
+    sites = Counter()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            qualified = _qualified_import(node.func, bindings)
+            if isinstance(node.func, ast.Name) and node.func.id in _REFLECTIVE_CALLS:
+                sites[f"calls {node.func.id}()"] += 1
+            elif qualified in _REFLECTIVE_IMPORTS:
+                sites[f"calls {qualified}()"] += 1
+        elif isinstance(node, ast.Attribute) and node.attr in _REFLECTIVE_ATTRIBUTES:
+            sites[f"reads .{node.attr}"] += 1
+        elif isinstance(node, ast.Global):
+            sites.update(f"rebinds module {name}" for name in node.names if name in bindings)
+        if isinstance(node, (ast.Assign, ast.Delete)):
+            targets = node.targets
+        elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
+            targets = [node.target]
+        else:
+            continue
+        for target in (item for raw in targets for item in _store_targets(raw)):
+            depth, root = 0, target
+            while isinstance(root, (ast.Attribute, ast.Subscript)):
+                depth += isinstance(root, ast.Attribute)
+                root = root.value
+            if not isinstance(root, ast.Name):
+                continue
+            if target is root:
+                if node in tree.body and root.id in bindings:
+                    sites[f"rebinds module {root.id}"] += 1
+            elif root.id in bindings or (depth >= 2 and root.id not in {"self", "cls"}):
+                # A chain like `t.Tensor.contiguous` reaches a module through an alias.
+                sites[f"assigns {ast.unparse(target)}"] += 1
+    return sites
+
+
+def _patching_sites_of(path: Path) -> Counter | None:
+    try:
+        return runtime_patching_sites(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, SyntaxError):
+        # The task's own compile action reports an unreadable candidate.
+        return None
+
+
+def _reject_added_patching(relative: str, current: Counter, initial: Counter) -> None:
+    added = sorted(set((current - initial).elements()))
+    if added:
+        raise RuntimeError(f"Protected test/harness policy rejected {relative}: it adds runtime patching "
+                           f"({'; '.join(added[:6])}); a candidate may not rewrite modules, frames or "
+                           "other code at run time")
+
+
+def _editable_python_files(root: Path, spec: TaskSpec) -> list[str]:
+    files = []
+    for edit in spec.candidate.editable:
+        if edit.scope == "tree":
+            files.extend(path.relative_to(root).as_posix() for path in sorted((root / edit.path).rglob("*.py"))
+                         if not set(path.relative_to(root).parts) & _V2_RUNTIME_DIRS)
+        elif edit.path.endswith(".py") and (root / edit.path).is_file():
+            files.append(edit.path)
+    return files
+
+
+def verify_no_runtime_patching(original: Path | None, candidate: Path, relative: str) -> None:
+    """Apply the final evaluation's runtime-patching policy to one candidate file."""
+    current = _patching_sites_of(candidate)
+    if current is not None:
+        initial = _patching_sites_of(original) if original is not None and original.is_file() else None
+        _reject_added_patching(relative, current, initial or Counter())
+
+
+_STARTUP_HOOKS = frozenset({"conftest.py", "sitecustomize.py", "usercustomize.py"})
+
+
+def verify_measured_tree(reference: Path, root: Path, spec: TaskSpec, *,
+                         ignored: frozenset[str] = frozenset()) -> None:
+    """Refuse to measure ``root`` when its protected files differ from ``reference``.
+
+    An agent searching in its own tree is measured there, so a changed timing
+    helper or runner would change the numbers it optimizes. Files only the
+    agent created are not part of any measurement and stay, except ones the
+    interpreter or pytest load on their own.
+    """
+    expected = snapshot_workspace_harness(reference, task_spec=spec)
+    selected = {relative: digest for relative, digest in expected.digests.items() if relative not in ignored}
+    current = _v2_digests(root, spec, selected, expected.initial_symbols)
+    changed = sorted(relative for relative, digest in selected.items() if current.get(relative) != digest)
+    hooks = sorted(path.relative_to(root).as_posix() for path in _v2_files(root)
+                   if (path.name in _STARTUP_HOOKS or path.suffix == ".pth")
+                   and path.relative_to(root).as_posix() not in expected.digests)
+    if changed or hooks:
+        details = [f"changed or missing={changed}"] if changed else []
+        details += [f"added interpreter/pytest hooks={hooks}"] if hooks else []
+        raise RuntimeError("Protected task files differ from the task package, so this tree cannot be "
+                           "measured: " + "; ".join(details) + ". Restore them; edit only the declared candidate.")
 
 
 def _is_protected_path(rel: Path) -> bool:
@@ -701,7 +829,9 @@ def snapshot_workspace_harness(
         if missing:
             raise RuntimeError(f"Task inputs missing before agent execution: {missing}")
         digests = _v2_digests(root, spec, protected, initial_symbols)
-        return WorkspaceSnapshot(root, digests, spec, initial_symbols)
+        patching = {relative: dict(sites) for relative in _editable_python_files(root, spec)
+                    if (sites := _patching_sites_of(root / relative)) is not None}
+        return WorkspaceSnapshot(root, digests, spec, initial_symbols, patching)
     task_inputs = (
         _task_input_paths(root, Path(task_root)) if task_root is not None else set()
     )
@@ -756,6 +886,12 @@ def verify_workspace_harness(snapshot: WorkspaceSnapshot, logger=None, *, discar
 
     if discarded:
         current = _scan()
+
+    if snapshot.task_spec is not None and snapshot.initial_patching is not None:
+        for relative in _editable_python_files(snapshot.root, snapshot.task_spec):
+            sites = _patching_sites_of(snapshot.root / relative)
+            if sites is not None:
+                _reject_added_patching(relative, sites, Counter(snapshot.initial_patching.get(relative, {})))
 
     modified = sorted(
         rel for rel, digest in before.items()
