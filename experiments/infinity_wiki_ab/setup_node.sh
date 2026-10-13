@@ -85,8 +85,9 @@ if [[ "$MODE" == "--provision" ]]; then
     [[ -f "$ROOT/claude-home/.claude.json" ]] || echo '{"hasCompletedOnboarding": true}' > "$ROOT/claude-home/.claude.json"
     for arm in "${ARMS[@]}"; do
         case "$arm" in
-            kf|kf_wiki) (cd "$ROOT/aka-$arm" && HYPERLOOM_ROOT="$ROOT/src/hyperloom" make docker-setup-forge) ;;
-            geak|geak_wiki) (cd "$ROOT/aka-$arm" && GEAK_HOME="$ROOT/src/geak" make docker-setup-geak) ;;
+            kf*) (cd "$ROOT/aka-$arm" && HYPERLOOM_ROOT="$ROOT/src/hyperloom" make docker-setup-forge) ;;
+            geak*) (cd "$ROOT/aka-$arm" && GEAK_HOME="$ROOT/src/geak" make docker-setup-geak) ;;
+            *) echo "ERROR: no engine is provisioned for arm $arm" >&2; exit 1 ;;
         esac
     done
 fi
