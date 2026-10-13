@@ -465,6 +465,8 @@ def test_launcher_delivers_complete_bundle_without_repeating_loop(tmp_path, monk
     command = commands[0]
     assert ("forge-loop" in command) == (state == "implemented")
     assert ("forge-rewrite-by-flydsl" in command) == (state == "unimplemented")
+    # The driver is Arena's; the engine's preparation agent must never replace it.
+    assert ("--no-prepare-task" in command) == (state == "implemented")
     # One relative budget, already short of the campaign by the startup margin.
     assert "--deadline-unix" not in command
     budget = float(command[command.index("--max-hours") + 1]) * 3600
