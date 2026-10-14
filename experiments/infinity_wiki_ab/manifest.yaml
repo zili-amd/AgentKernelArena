@@ -21,9 +21,10 @@ pins:
   # (forge-reasoning-main and forge-knowledge-wiki-reasoning-main both carry it). The kf arm gets `hyperloom`
   # (main 1a444f6b8 + reasoning, no knowledge base), kf_wiki gets `hyperloom_wiki` (the same reasoning plus the
   # read-only knowledge base tools for every forge role and the declared test_*.py target escape, with each
-  # wiki call now carrying a required logged reason).
-  hyperloom: {repo: AMD-AGI/Hyperloom, branch: forge-reasoning-main, commit: 816718bc0942a99874abe5460bba8348b52fa213}
-  hyperloom_wiki: {repo: AMD-AGI/Hyperloom, branch: forge-knowledge-wiki-reasoning-main, commit: 1d51fd5b8582424187f33394a541f7677d32892f}
+  # wiki call now carrying a required logged reason). Both also keep each fan-out lane's own rationale for the
+  # iteration that measures it; the 12 h long job on 816718bc0 / 1d51fd5b8 logged only "lane N of a fan-out round".
+  hyperloom: {repo: AMD-AGI/Hyperloom, branch: forge-reasoning-main, commit: d35b106e361227520d158cf0ddb66d61fb7c3024}
+  hyperloom_wiki: {repo: AMD-AGI/Hyperloom, branch: forge-knowledge-wiki-reasoning-main, commit: 55d81457ab6d53f8833e24d34ac0eaa9bea9b6b1}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
   # Test with main. main 0523818 merges the gfx942-technique-context branch (row reductions, HIP MFMA GEMM
   # structure, GEMM tile scheduling, plus the earlier FP8/MFMA-layout/FA/MoE/latency/Triton/XCD pages) and adds
