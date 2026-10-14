@@ -16,29 +16,30 @@ hardware:
 pins:
   # The commit pack.sh runs from (dist/pins.txt records it); this file lives in that commit.
   agentkernelarena: {repo: AMD-AGI/AgentKernelArena, branch: infinity-wiki-AB-test}
-  # main 1a444f6b8 plus the read-only knowledge base tools for every forge role, and declared test_*.py
-  # targets left editable (ROCmBench colocates a kernel with its tests). The previous round ran the same two
-  # commits on main f2b32cdc9 (branch forge-knowledge-wiki-tool, 19266e1de).
-  hyperloom: {repo: AMD-AGI/Hyperloom, branch: forge-knowledge-wiki-tool-main, commit: c4a848920e2d57b95387b12c77bdb0541fa783ce}
+  # Two Hyperloom branches so test A and test B differ only by the wiki integration. Each adds the reasoning
+  # change: the implementer states a decision-focused rationale and it is logged on every iteration_result
+  # (forge-reasoning-main and forge-knowledge-wiki-reasoning-main both carry it). The kf arm gets `hyperloom`
+  # (main 1a444f6b8 + reasoning, no knowledge base), kf_wiki gets `hyperloom_wiki` (the same reasoning plus the
+  # read-only knowledge base tools for every forge role and the declared test_*.py target escape, with each
+  # wiki call now carrying a required logged reason).
+  hyperloom: {repo: AMD-AGI/Hyperloom, branch: forge-reasoning-main, commit: 816718bc0942a99874abe5460bba8348b52fa213}
+  hyperloom_wiki: {repo: AMD-AGI/Hyperloom, branch: forge-knowledge-wiki-reasoning-main, commit: 1d51fd5b8582424187f33394a541f7677d32892f}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
-  # 20 curated pages, 147 source pages (18 official AMD docs), a SKILL.md that matches the corpus.
-  # Overlap audit at 0e70cb2: refk_fp8_blockwise_mm and mla_decode are transfer (no page names them);
-  # moe_gemm and test_flashattention_fwd are self-reference (kernel-rocmbench-triton-tflops holds AKA's
-  # baseline TFLOPs for them, no implementation), so report those two separately.
-  wiki: {repo: AMD-BRAIN-Internal/infinity-wiki, branch: main, commit: 0e70cb2bcc398c4720c8223426c0bdcd42a0b1aa, variant: v0-unmodified}
-  # main plus 11 gfx942 technique and hardware pages and 17 sources: e7f8e84's 8 pages (FP8 FNUZ/OCP, CDNA3
-  # MFMA operand layout, FlashAttention forward loop, MoE grouped GEMM, HIP latency hiding, Triton tuning,
-  # bandwidth-bound Triton kernels, XCD remap) and 467eaa2's row reductions, HIP MFMA GEMM structure and GEMM
-  # tile scheduling. Overlap audit (screening/wiki-leakage-audit-467eaa2.md): the new pages are transfer; the
-  # three kernel pages naming a test task hold original-shape baselines only (self-reference). Local branch.
-  wiki_branch: {repo: AMD-BRAIN-Internal/infinity-wiki, branch: gfx942-technique-context, commit: 467eaa2a68ebe87d813e734c282e029e5c73fa75, variant: v2-rewrite-and-tune}
+  # Test with main. main 0523818 merges the gfx942-technique-context branch (row reductions, HIP MFMA GEMM
+  # structure, GEMM tile scheduling, plus the earlier FP8/MFMA-layout/FA/MoE/latency/Triton/XCD pages) and adds
+  # more gfx942 technique pages (split-K, software pipelining, pipeline stages, MFMA layout selection, loop
+  # unrolling, kernel fusion) and sources. Re-audit leakage for the 4 tasks against 0523818 before the main
+  # phase: general technique pages are the treatment being measured; a page giving a task's exact solution is not.
+  wiki: {repo: AMD-BRAIN-Internal/infinity-wiki, branch: main, commit: 052381802b23d029837c84263fe2fb873e9e93a6, variant: v3-main}
   model: claude-opus-5  # confirm the gateway's id at the pilot; identical in every arm
 
+# hyperloom names the forge engine branch a forge arm installs and runs (checked out at src/<pin with - for _>);
 # knowledge_wiki names the wiki pin an arm reads (checked out at src/infinity-<pin with - for _>), or false.
-# This round compares kf with kf_wiki, which reads the gfx942-technique-context branch.
+# This round is test A (kf: hyperloom, no wiki) vs test B (kf_wiki: hyperloom_wiki, reads main); they differ
+# only by the wiki integration and the knowledge base, so the comparison isolates the wiki's effect.
 arms:
-  kf: {template: forge, knowledge_wiki: false}
-  kf_wiki: {template: forge, knowledge_wiki: wiki_branch}
+  kf: {template: forge, hyperloom: hyperloom, knowledge_wiki: false}
+  kf_wiki: {template: forge, hyperloom: hyperloom_wiki, knowledge_wiki: wiki}
   geak: {template: geak, knowledge_wiki: false}
   geak_wiki: {template: geak, knowledge_wiki: wiki}
 
