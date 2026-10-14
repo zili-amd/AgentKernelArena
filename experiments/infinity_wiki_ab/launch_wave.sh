@@ -69,7 +69,8 @@ for i in "${!ARMS[@]}"; do
                SSL_CERT_FILE=/workspace/wiki_ab/ca-certificates.crt
                REQUESTS_CA_BUNDLE=/workspace/wiki_ab/ca-certificates.crt)
     case "$arm" in
-        kf*) env_args+=(HYPERLOOM_ROOT="$ROOT/src/hyperloom") ;;
+        kf*) hl_pin="$(python3 -c "import sys, yaml; print(yaml.safe_load(open(sys.argv[1]))['arms'][sys.argv[2]].get('hyperloom', 'hyperloom'))" "$HERE/manifest.yaml" "$arm")"
+             env_args+=(HYPERLOOM_ROOT="$ROOT/src/${hl_pin//_/-}") ;;
         geak*) env_args+=(GEAK_HOME="$ROOT/src/geak") ;;
     esac
     wiki_pin="$(python3 -c "import sys, yaml; v = yaml.safe_load(open(sys.argv[1]))['arms'][sys.argv[2]]['knowledge_wiki']

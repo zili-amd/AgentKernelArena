@@ -40,9 +40,13 @@ mkdir -p "$DIST"
 rm -f "$DIST"/*.bundle "$DIST/pins.txt"
 rm -rf "$DIST/experiment"
 bundle aka "$AKA_SRC" "$(git -C "$AKA_SRC" rev-parse HEAD)"
-bundle hyperloom "$HYPERLOOM_SRC" "$(pin hyperloom)"
-# Every wiki pin (wiki, wiki_branch, ...) is a commit of the same repository.
-for key in $(python3 -c "import sys, yaml; print(*[k for k in yaml.safe_load(open(sys.argv[1]))['pins'] if k.startswith('wiki')])" "$HERE/manifest.yaml"); do
+# Every hyperloom pin (hyperloom, hyperloom_wiki, ...) and every wiki pin (wiki, wiki_branch, ...) is a commit
+# of its one repository; the arms map to them by name. A local checkout must hold all of them.
+keys() { python3 -c "import sys, yaml; print(*[k for k in yaml.safe_load(open(sys.argv[1]))['pins'] if k.startswith(sys.argv[2])])" "$HERE/manifest.yaml" "$1"; }
+for key in $(keys hyperloom); do
+    bundle "$key" "$HYPERLOOM_SRC" "$(pin "$key")"
+done
+for key in $(keys wiki); do
     bundle "$key" "$WIKI_SRC" "$(pin "$key")"
 done
 if [[ " ${ARMS[*]} " == *" geak"* ]]; then

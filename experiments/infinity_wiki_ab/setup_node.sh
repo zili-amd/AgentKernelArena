@@ -40,10 +40,17 @@ if [[ "$MODE" == "--check" ]]; then
 fi
 
 mkdir -p "$ROOT/src" "$ROOT/logs" "$ROOT/held_out"
-checkout hyperloom "$ROOT/src/hyperloom"
+# Arm -> forge engine branch (hyperloom | hyperloom_wiki | ...) from the manifest; defaults to the plain pin.
+arm_hyperloom() {
+    python3 -c "import sys, yaml; print(yaml.safe_load(open(sys.argv[1]))['arms'][sys.argv[2]].get('hyperloom', 'hyperloom'))" \
+        "$DIST/experiment/manifest.yaml" "$1"
+}
+# Each hyperloom pin goes to src/<pin with - for _>; each wiki pin to src/infinity-<pin>; launch_wave.sh maps arms the same way.
+for name in $(awk '$1 ~ /^hyperloom/ {print $1}' "$DIST/pins.txt"); do
+    checkout "$name" "$ROOT/src/${name//_/-}"
+done
 # The pins, not the bundles present, say what this pack needs: dist/ can hold an older pack's files.
 [[ -n "$(pin geak)" ]] && checkout geak "$ROOT/src/geak"
-# Pin wiki goes to src/infinity-wiki, pin wiki_branch to src/infinity-wiki-branch; launch_wave.sh maps arms the same way.
 for name in $(awk '$1 ~ /^wiki/ {print $1}' "$DIST/pins.txt"); do
     checkout "$name" "$ROOT/src/infinity-${name//_/-}"
 done
@@ -85,7 +92,8 @@ if [[ "$MODE" == "--provision" ]]; then
     [[ -f "$ROOT/claude-home/.claude.json" ]] || echo '{"hasCompletedOnboarding": true}' > "$ROOT/claude-home/.claude.json"
     for arm in "${ARMS[@]}"; do
         case "$arm" in
-            kf*) (cd "$ROOT/aka-$arm" && HYPERLOOM_ROOT="$ROOT/src/hyperloom" make docker-setup-forge) ;;
+            kf*) hl="$(arm_hyperloom "$arm")"
+                 (cd "$ROOT/aka-$arm" && HYPERLOOM_ROOT="$ROOT/src/${hl//_/-}" make docker-setup-forge) ;;
             geak*) (cd "$ROOT/aka-$arm" && GEAK_HOME="$ROOT/src/geak" make docker-setup-geak) ;;
             *) echo "ERROR: no engine is provisioned for arm $arm" >&2; exit 1 ;;
         esac

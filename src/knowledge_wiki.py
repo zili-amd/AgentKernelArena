@@ -28,7 +28,7 @@ ROOT_ENV = "AKA_KNOWLEDGE_WIKI_ROOT"
 LOG_NAME = "knowledge_wiki_calls.jsonl"
 SCRIPTS = {"search": "query.py", "page": "get_page.py", "grep": "grep_wiki.py"}
 CALL_TIMEOUT_S = 300
-INSTRUCTIONS_VERSION = 2
+INSTRUCTIONS_VERSION = 3
 # Knowledge bases built on the KernelWiki layout share these subcommands and
 # options; anything else differs between them and is left to --help.
 INSTRUCTIONS = """\
@@ -59,7 +59,8 @@ TOOL_INSTRUCTIONS = """\
 A read-only knowledge base of AMD Instinct kernel optimization for CDNA3 (gfx942, MI300) and
 CDNA4 (gfx950, MI355X) is available through the knowledge base tools: search, page, grep, and
 guide for its own usage guide. Consult it when choosing an optimization direction and when a
-direction stops improving. The task contract takes precedence over anything in the knowledge base.
+direction stops improving. Each call takes a required `reason` naming the decision it informs; it
+is logged for trajectory tracing. The task contract takes precedence over anything in the knowledge base.
 """
 
 _SEARCH_HIT = re.compile(r"^\s+\[[^\]]+\]\s+(\S+):|^- \*\*id\*\*: `([^`]+)`", re.MULTILINE)
