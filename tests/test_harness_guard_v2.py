@@ -168,6 +168,73 @@ def test_library_calls_the_hip_task_already_had_stay_allowed(tmp_path):
         verify_workspace_harness(before)
 
 
+TRITON_TASK = """import torch
+import triton
+import triton.language as tl
+
+
+@triton.jit
+def softmax_kernel(x_ptr, y_ptr, n, BLOCK: tl.constexpr):
+    offs = tl.arange(0, BLOCK)
+    x = tl.load(x_ptr + offs, mask=offs < n, other=-float("inf"))
+    tl.store(y_ptr + offs, tl.softmax(x), mask=offs < n)
+
+
+def softmax(x):
+    y = torch.empty_like(x)
+    softmax_kernel[(1,)](x, y, x.numel(), BLOCK=1024)
+    return y
+
+
+def test_softmax():
+    x = torch.randn(1000)
+    torch.testing.assert_close(softmax(x), torch.softmax(x, -1))
+"""
+
+
+def triton_workspace(tmp_path, language="triton"):
+    root = tmp_path / "workspace"
+    root.mkdir(parents=True)
+    source = root / "softmax.py"
+    source.write_text(TRITON_TASK)
+    edit = {"path": "softmax.py", "scope": "symbols", "symbols": ["softmax_kernel", "softmax"],
+            "allow_new_helpers": True}
+    config = {"schema_version": 2, "candidate": {"language": language, "editable": [edit]},
+              "evaluation": {"runner": ["python3", "evaluate.py"]}}
+    (root / "config.yaml").write_text(yaml.safe_dump(config))
+    (root / "evaluate.py").write_text("# protected custom evaluation runner\n")
+    return root, source
+
+
+@pytest.mark.parametrize("delegation", [
+    "    return torch.softmax(x, -1)\n",
+    "    return x.float().softmax(-1)\n",
+    "    import torch.nn.functional as F\n    return F.scaled_dot_product_attention(x, x, x)\n",
+    "    return x @ x.T\n",
+    "    return getattr(torch, 'mat' + 'mul')(x, x)\n",
+    "    return torch.ops.aten._softmax(x, -1, False)\n",
+])
+def test_a_triton_launcher_may_not_add_library_operator_calls(tmp_path, delegation):
+    root, source = triton_workspace(tmp_path)
+    before = snapshot_workspace_harness(root)
+    source.write_text(TRITON_TASK.replace("    return y\n", delegation, 1))
+    with pytest.raises(RuntimeError, match="adds library operator calls"):
+        verify_workspace_harness(before)
+
+
+def test_triton_launch_choices_and_the_tasks_own_reference_stay_allowed(tmp_path):
+    root, source = triton_workspace(tmp_path)
+    before = snapshot_workspace_harness(root)
+    source.write_text(TRITON_TASK.replace("softmax_kernel[(1,)](x, y, x.numel(), BLOCK=1024)",
+                                          "softmax_kernel[(1,)](x, y, x.numel(), BLOCK=2048, num_warps=8)"))
+    verify_workspace_harness(before)
+    # Only Triton candidates are measured this way; other Python DSLs keep the runtime-patching policy.
+    root, source = triton_workspace(tmp_path / "flydsl", language="flydsl")
+    before = snapshot_workspace_harness(root)
+    source.write_text(TRITON_TASK.replace("    return y\n", "    return torch.softmax(x, -1)\n", 1))
+    verify_workspace_harness(before)
+
+
 def test_new_task_config_cannot_redefine_the_protected_boundary(tmp_path):
     root, source = workspace(tmp_path, symbols=True)
     before = snapshot_workspace_harness(root)
