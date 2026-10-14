@@ -56,9 +56,10 @@ def moe_gemm(p: dict) -> float:
 
 
 def flash_attention_fwd(p: dict) -> float:
+    # Causal: QK^T and PV are needed only on and below the diagonal, half of 4 * z*h*s*s*d.
     a = p["arguments"]
     z, h, s, d, elt = a["Z"], a["H"], a["N_CTX"], a["D_HEAD"], SIZE[a["dtype_str"]]
-    return bound(4 * z * h * s * s * d, 4 * z * h * s * d * elt, PEAK[a["dtype_str"]])
+    return bound(2 * z * h * s * s * d, 4 * z * h * s * d * elt, PEAK[a["dtype_str"]])
 
 
 def rmsnorm_fwd(p: dict) -> float:
@@ -114,6 +115,10 @@ MODELS = {
     "triton2triton/rocmbench/medium/naive_softmax": softmax,
     "hip2hip/gpumode_large/SimpleMatmulModule": gpumode_matmul,
     "hip2hip/gpumode_large/SoftmaxModule": gpumode_softmax,
+    "triton2triton/rocmbench_open/hard/test_flashattention_fwd": flash_attention_fwd,
+    "triton2triton/geak_eval_open/L3/gemm": aiter_gemm_bias,
+    "triton2triton/rocmbench_open/hard/gemm": rocmbench_gemm,
+    "triton2triton/rocmbench_open/medium/naive_softmax": softmax,
 }
 
 

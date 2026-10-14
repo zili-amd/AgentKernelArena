@@ -152,7 +152,7 @@ def install_candidate(spec: TaskSpec, source: Path, destination: Path,
             # The search installs every candidate here, so it must refuse what the final evaluation refuses.
             verify_symbol_scope(original, files[scope.path], spec, scope.path)
     for relative, path in files.items():
-        verify_candidate_additions(resolve_task_path(origin, relative), path, relative)
+        verify_candidate_additions(resolve_task_path(origin, relative), path, relative, spec.candidate.language)
     for relative in files:
         resolve_task_path(destination, relative)
     # Propagate declared-tree deletions too, so a removed helper cannot survive

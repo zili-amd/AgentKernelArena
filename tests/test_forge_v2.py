@@ -390,6 +390,19 @@ def test_search_install_refuses_added_library_calls_in_hip_files(tmp_path):
     install_candidate(spec, engine, context.workspace)
 
 
+def test_search_install_refuses_added_library_calls_in_triton_launchers(tmp_path):
+    context, plan, _ = fixture_task(tmp_path, language="triton")
+    original = "import torch\n\ndef launch(x):\n    return run_kernel(x, block=64)\n"
+    (context.workspace / "source/kernel.py").write_text(original)
+    engine = Path(plan["engine_root"])
+    (engine / "source/kernel.py").write_text(original.replace("run_kernel(x, block=64)", "torch.matmul(x, x)"))
+    with pytest.raises(RuntimeError, match=r"adds library operator calls \(delegates to torch.matmul\)"):
+        install_candidate(context.spec, engine, context.workspace)
+    assert (context.workspace / "source/kernel.py").read_text() == original
+    (engine / "source/kernel.py").write_text(original.replace("block=64", "block=256"))
+    install_candidate(context.spec, engine, context.workspace)
+
+
 def test_colocated_harness_protected_during_install(tmp_path):
     context, plan, _ = fixture_task(tmp_path)
     original = 'def compute():\n    return 1\n\ndef test_compute():\n    assert compute() == 1\n'
