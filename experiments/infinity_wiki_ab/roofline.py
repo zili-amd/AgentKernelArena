@@ -5,7 +5,8 @@ A case's effective bound is max(roofline, LAUNCH_FLOOR_S): an optimal kernel
 still pays launch and timing overhead, so a tiny case cannot show a large
 speedup however slow its baseline is. Headroom = sum(baseline) / sum(effective
 bound) over the task's performance cases; rule 1 requires >= MIN_HEADROOM.
-Without --baselines only the bound distribution is printed. Rules 2-4 (wiki
+The vllm_large models bound against attained rather than datasheet figures
+(ATTAINED_*). Without --baselines only the bound distribution is printed. Rules 2-4 (wiki
 relevance, task_validator, implemented Triton/HIP) are recorded in manifest.yaml.
 """
 from __future__ import annotations
@@ -28,6 +29,25 @@ LAUNCH_FLOOR_S = 5e-6
 
 def bound(flops: float, nbytes: float, peak: float) -> float:
     return max(flops / peak, nbytes / BW)
+
+
+# What kernels attain on MI300X, from measure_peaks.py on two nodes (2026-10-15; the higher node is kept). The read
+# rate is by working-set size in MiB, timed as AKA times (graph replay, no cache flush): sets under the 256 MB
+# Infinity Cache are partly served from it, and a read of a few tens of MB is too short to reach full rate. The
+# matrix peaks are the best hipBLASLt GEMM over large shapes, 47% (FP8) and 48% (FP16) of the PEAK figures.
+ATTAINED_READ_BYTES_PER_S = {16: 1.60e12, 32: 3.15e12, 64: 3.50e12, 128: 4.33e12, 192: 4.68e12, 256: 4.93e12,
+                             384: 4.00e12, 512: 4.07e12, 4096: 4.29e12}
+ATTAINED_PEAK = {"fp8": 1.226e15, "fp16": 6.29e14}
+
+
+def attained_bound(flops: float, nbytes: float, peak: float) -> float:
+    sizes = sorted(ATTAINED_READ_BYTES_PER_S)
+    mib = min(max(nbytes / 2**20, sizes[0]), sizes[-1])
+    upper = next(s for s in sizes if s >= mib)
+    lower = sizes[max(sizes.index(upper) - 1, 0)]
+    weight = 0.0 if upper == lower else math.log(mib / lower) / math.log(upper / lower)
+    low, high = ATTAINED_READ_BYTES_PER_S[lower], ATTAINED_READ_BYTES_PER_S[upper]
+    return max(flops / peak, nbytes / (low + weight * (high - low)))
 
 
 def refk_fp8_blockwise_mm(p: dict) -> float:
@@ -123,15 +143,15 @@ def awq_gemm(p: dict) -> float:
     m, k, n_packed, group, _ = p["configuration"]
     n, groups = n_packed * 8, k // group
     nbytes = k * n // 2 + groups * n * SIZE["fp16"] + groups * n_packed * 4 + (m * k + m * n) * SIZE["fp16"]
-    return bound(2 * m * n * k, nbytes, PEAK["fp16"])
+    return attained_bound(2 * m * n * k, nbytes, ATTAINED_PEAK["fp16"])
 
 
 def w8a8_block_scaled_mm(p: dict) -> float:
     # fp8 A[M, K] and B[N, K] with fp32 per-block scales -> fp16 out[M, N]
     m, n, k, block_n, block_k = p["configuration"]
     sk, sn = math.ceil(k / block_k), math.ceil(n / block_n)
-    return bound(2 * m * n * k, (m * k + n * k) * SIZE["fp8"] + 4 * (m * sk + sn * sk) + m * n * SIZE["fp16"],
-                 PEAK["fp8"])
+    return attained_bound(2 * m * n * k, (m * k + n * k) * SIZE["fp8"] + 4 * (m * sk + sn * sk) + m * n * SIZE["fp16"],
+                          ATTAINED_PEAK["fp8"])
 
 
 MODELS = {
@@ -157,6 +177,7 @@ MODELS = {
     "triton2triton/vllm_large/triton_awq_gemm": awq_gemm,
     "triton2triton/vllm_large/triton_w8a8_block_scaled_mm": w8a8_block_scaled_mm,
 }
+ATTAINED_TASKS = {task for task, model in MODELS.items() if model in (awq_gemm, w8a8_block_scaled_mm)}
 
 
 def performance_cases(aka: Path, task: str) -> list[dict]:
