@@ -56,7 +56,7 @@ selection_rule: >-
   (4) AKA's own measurement driver and a baseline spread <= 3%; (5) no wiki page
   that gives the task's solution. prefilter.py, screen_baselines.py and
   screening/ hold the screen; make_variants.py writes the production-size HIP
-  variants and the open-launcher Triton variants.
+  variants, the open-launcher Triton variants and the own-kernels torch2hip variants.
 
 phases:
   pilot:
@@ -86,7 +86,8 @@ phases:
     timeout_seconds: 8100
     repeats: 3
     # Screened on MI300X (5 rounds); headroom vs max(roofline, 5 us). The Triton tasks are the
-    # open-launcher variants from make_variants.py.
+    # open-launcher variants from make_variants.py; the torch2hip tasks are its own-kernels
+    # variants, whose candidate starts empty (forge's initialize workflow, then the loop).
     tasks:
       - hip2hip/gpumode_large/SimpleMatmulModule   # 13.2x; FP32 GEMM
       - hip2hip/gpumode_large/SoftmaxModule        # 3.4x; FP32 row softmax; technique-row-reduction-kernels
@@ -94,6 +95,9 @@ phases:
       - triton2triton/geak_eval_open/L3/gemm       # 6.6x; BF16 GEMM + bias, M 1-16384; technique-gemm-tile-scheduling
       - triton2triton/rocmbench_open/hard/gemm     # 2.3x; FP16 GEMM; technique-triton-amd-kernel-tuning, technique-gemm-tile-scheduling
       - triton2triton/rocmbench_open/medium/naive_softmax  # 9.3x; row softmax; technique-row-reduction-kernels
+      - torch2hip/kernelbench_own/level1/l1n95_CrossEntropyLoss  # 4.2x; FP32 cross entropy, 8192x1024-8192x16384
+      - torch2hip/kernelbench_own/level1/l1n36_RMSNorm_  # 3.7x; FP32 RMSNorm over 64 channels
+      - torch2hip/kernelbench_own/level1/l1n4_Matrix_vector_multiplication_  # 2.5x; FP32 matrix-vector, K 131072-262144
 
 schedule:
   # This round runs ARMS="kf kf_wiki" (GEAK refuses to run as root in the runtime).
@@ -108,9 +112,9 @@ preregistration:
     A failed, incorrect or unscoreable final (AKA reports 0.0) counts as 1.0.
   primary_comparison: >-
     Per (task, repeat), the paired log ratio log(kf_wiki / kf): 3 pairs per task,
-    18 over the six main tasks.
+    27 over the nine main tasks.
   test: >-
-    Descriptive per task (3 pairs). Over 18 pairs, the exact two-sided Wilcoxon
+    Descriptive per task (3 pairs). Over 27 pairs, the exact two-sided Wilcoxon
     signed-rank test and the bootstrap CI of the median ratio; report each pair.
   headline_numbers: quiet re-measurement (>= 5 interleaved rounds per task, same GPU) replaces in-run timings.
   secondary:

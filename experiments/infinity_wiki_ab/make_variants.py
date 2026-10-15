@@ -18,6 +18,11 @@ task's launch code sits in a protected autograd.Function, which a symbol scope
 cannot open, so the variant moves it into a top-level flash_fwd_launch that the
 Function calls. With the launcher editable, the README's own-kernels rule and the
 harness guard keep PyTorch and library operators out of the candidate.
+
+Own-kernels variants of torch2hip tasks: the candidate starts empty and the
+baseline is the PyTorch module, which hands the operator to rocBLAS or ATen. A
+variant keeps the task unchanged and adds the own-kernels rule to its README;
+the harness guard refuses a candidate that calls those libraries instead.
     make_variants.py [--aka PATH] [--force]
 """
 from __future__ import annotations
@@ -146,6 +151,11 @@ class _attention(torch.autograd.Function):
         ctx.BLOCK_DMODEL = Lk
         return o
 '''
+# source task -> variant task
+OWN_KERNEL_VARIANTS = {
+    f"torch2hip/kernelbench/level1/{name}": f"torch2hip/kernelbench_own/level1/{name}"
+    for name in ("l1n95_CrossEntropyLoss", "l1n36_RMSNorm_", "l1n4_Matrix_vector_multiplication_")
+}
 OWN_TRITON_KERNELS_RULE = (
     "Compute the operator in Triton kernels the candidate defines and launches. Do not\n"
     "call a PyTorch/ATen matrix-product, softmax or attention operator, `torch.ops`, or\n"
@@ -167,13 +177,25 @@ def rewrite_get_inputs(path: Path, cases: list[tuple]) -> None:
     path.write_text(updated)
 
 
-def write_variant(aka: Path, source: str, target: str, cases: list[tuple], force: bool) -> Path:
+def copy_task(aka: Path, source: str, target: str, force: bool) -> Path:
     src, dst = aka / "tasks" / source, aka / "tasks" / target
     if dst.exists():
         if not force:
             raise FileExistsError(f"{dst} exists; pass --force to rewrite it")
         shutil.rmtree(dst)
     shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__"))
+    return dst
+
+
+def add_own_kernels_rule(readme: Path) -> None:
+    text = readme.read_text()
+    if PROTECTED_CODE_RULE not in text:
+        raise ValueError(f"{readme}: no protected-code rule to extend")
+    readme.write_text(text.replace(PROTECTED_CODE_RULE, PROTECTED_CODE_RULE + OWN_KERNELS_RULE, 1))
+
+
+def write_variant(aka: Path, source: str, target: str, cases: list[tuple], force: bool) -> Path:
+    dst = copy_task(aka, source, target, force)
     for folder in ("pytorch_code_module", "pytorch_code_functional"):
         for path in sorted((dst / folder).glob("*.py")):
             rewrite_get_inputs(path, cases)
@@ -190,9 +212,14 @@ def write_variant(aka: Path, source: str, target: str, cases: list[tuple], force
     text, count = re.subn(r"\*\*\d+ cases\*\*", f"**{len(cases)} cases**", readme.read_text())
     if count == 0:
         raise ValueError(f"{readme}: no case count to update")
-    if PROTECTED_CODE_RULE not in text:
-        raise ValueError(f"{readme}: no protected-code rule to extend")
-    readme.write_text(text.replace(PROTECTED_CODE_RULE, PROTECTED_CODE_RULE + OWN_KERNELS_RULE, 1))
+    readme.write_text(text)
+    add_own_kernels_rule(readme)
+    return dst
+
+
+def write_own_kernels_variant(aka: Path, source: str, target: str, force: bool) -> Path:
+    dst = copy_task(aka, source, target, force)
+    add_own_kernels_rule(dst / "README.md")
     return dst
 
 
@@ -205,12 +232,7 @@ def replace_once(path: Path, old: str, new: str) -> None:
 
 def write_open_launcher_variant(aka: Path, source: str, target: str, launchers: list[str], note: str,
                                 force: bool) -> Path:
-    src, dst = aka / "tasks" / source, aka / "tasks" / target
-    if dst.exists():
-        if not force:
-            raise FileExistsError(f"{dst} exists; pass --force to rewrite it")
-        shutil.rmtree(dst)
-    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__"))
+    dst = copy_task(aka, source, target, force)
     workloads = json.loads((dst / "workloads.json").read_text())
     kernel_file = dst / workloads["source"]
     if "flash_fwd_launch" in launchers:
@@ -243,6 +265,8 @@ def main() -> int:
         print(write_variant(args.aka, source, target, cases, args.force))
     for source, (target, launchers, note) in OPEN_LAUNCHERS.items():
         print(write_open_launcher_variant(args.aka, source, target, launchers, note, args.force))
+    for source, target in OWN_KERNEL_VARIANTS.items():
+        print(write_own_kernels_variant(args.aka, source, target, args.force))
     return 0
 
 

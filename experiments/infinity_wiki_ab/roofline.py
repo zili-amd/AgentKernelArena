@@ -102,6 +102,22 @@ def gpumode_softmax(p: dict) -> float:
     return 2 * math.prod(p["inputs"][0]["shape"]) * SIZE["fp32"] / BW
 
 
+def kernelbench_cross_entropy(p: dict) -> float:
+    # fp32 logits [B, C] and int64 targets [B] in, one scalar loss out
+    (b, c), _ = (item["shape"] for item in p["inputs"])
+    return (SIZE["fp32"] * b * c + 8 * b) / BW
+
+
+def kernelbench_rmsnorm(p: dict) -> float:
+    return 2 * math.prod(p["inputs"][0]["shape"]) * SIZE["fp32"] / BW
+
+
+def kernelbench_matvec(p: dict) -> float:
+    # fp32 A[M, K] @ B[K, 1]
+    (m, k), _ = (item["shape"] for item in p["inputs"])
+    return bound(2 * m * k, SIZE["fp32"] * (m * k + k + m), PEAK["fp32"])
+
+
 MODELS = {
     "triton2triton/geak_eval/L1/refk_fp8_blockwise_mm": refk_fp8_blockwise_mm,
     "hip2hip/others/mla_decode": mla_decode,
@@ -119,6 +135,9 @@ MODELS = {
     "triton2triton/geak_eval_open/L3/gemm": aiter_gemm_bias,
     "triton2triton/rocmbench_open/hard/gemm": rocmbench_gemm,
     "triton2triton/rocmbench_open/medium/naive_softmax": softmax,
+    "torch2hip/kernelbench_own/level1/l1n95_CrossEntropyLoss": kernelbench_cross_entropy,
+    "torch2hip/kernelbench_own/level1/l1n36_RMSNorm_": kernelbench_rmsnorm,
+    "torch2hip/kernelbench_own/level1/l1n4_Matrix_vector_multiplication_": kernelbench_matvec,
 }
 
 

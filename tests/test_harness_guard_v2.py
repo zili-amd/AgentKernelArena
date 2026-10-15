@@ -149,6 +149,11 @@ def hip_workspace(tmp_path):
     "    return a.mm(b) * 2;\n",
     "    hipblasSgemm(handle, HIPBLAS_OP_N, HIPBLAS_OP_N, m, n, k, &alpha, x, m, y, k, &beta, z, m);\n",
     "    return torch::softmax(a, -1);\n",
+    "    return at::mv(a, b.squeeze(1)).unsqueeze(1);\n",
+    "    return torch::nn::functional::cross_entropy(a, b);\n",
+    "    return at::nll_loss(at::log_softmax(a, 1), b);\n",
+    "    return a / (a * a).mean(1, true).add(1e-5).sqrt();\n",
+    "    return at::rms_norm(a, {64}, {}, 1e-5);\n",
 ])
 def test_a_hip_candidate_may_not_add_library_operator_calls(tmp_path, delegation):
     root, source = hip_workspace(tmp_path)
