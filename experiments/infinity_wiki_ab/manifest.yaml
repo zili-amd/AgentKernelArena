@@ -29,12 +29,14 @@ pins:
   hyperloom: {repo: AMD-AGI/Hyperloom, branch: forge-reasoning-main, commit: 8e24562d7bd87795317fcbca8338acd63f449d8f}
   hyperloom_wiki: {repo: AMD-AGI/Hyperloom, branch: forge-knowledge-wiki-reasoning-main, commit: 33f0c340a78a497b776b8ee0d665fa2fffcc432c}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
-  # Test with main. main 0523818 merges the gfx942-technique-context branch (row reductions, HIP MFMA GEMM
-  # structure, GEMM tile scheduling, plus the earlier FP8/MFMA-layout/FA/MoE/latency/Triton/XCD pages) and adds
-  # more gfx942 technique pages (split-K, software pipelining, pipeline stages, MFMA layout selection, loop
-  # unrolling, kernel fusion) and sources. Re-audit leakage for the 4 tasks against 0523818 before the main
-  # phase: general technique pages are the treatment being measured; a page giving a task's exact solution is not.
-  wiki: {repo: AMD-BRAIN-Internal/infinity-wiki, branch: main, commit: 052381802b23d029837c84263fe2fb873e9e93a6, variant: v3-main}
+  # Test with infinity-wiki PR #1 (branch gfx942-memory-bound-reduction-gemv), one commit on main cdcda80.
+  # Over the previous pin 0523818: main cdcda80 adds Hyperloom's knowledge cards (sources/community-kb) and the
+  # language pages built from them, a summary of the forge local_wiki both arms already have; the PR adds measured
+  # MI300X HBM and Infinity Cache figures (hw-hbm3), strided-axis and cross-workgroup reductions, GEMV and skinny
+  # GEMM, attention launch configuration for short sequences, and gfx942 non-temporal code generation, from
+  # upstream code, official docs, papers and one benchmark article. General technique pages are the treatment
+  # being measured; a page giving a task's exact solution is not.
+  wiki: {repo: AMD-BRAIN-Internal/infinity-wiki, branch: gfx942-memory-bound-reduction-gemv, commit: 26ea276483d806da75d903724ec25fc925996675, variant: v4-pr1}
   # Opus 5.5, identical in every arm. claude-opus-5-5 answered on 2026-10-15 through Claude Code 2.1.296
   # (setup_node.sh's pin); Claude Code older than 2.1.280 cannot use this model.
   model: claude-opus-5-5
