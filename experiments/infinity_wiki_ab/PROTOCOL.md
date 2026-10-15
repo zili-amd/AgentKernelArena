@@ -61,7 +61,7 @@ Verify after the run:
 ### 2. Same model and budget in every arm (MUST)
 
 The defaults differ:
-- forge: `model: claude-opus-5`, `timeout_seconds: 87300`.
+- forge: `model: claude-opus-5-5`, `timeout_seconds: 87300`.
 - GEAK: `model: null` (falls back to GEAK's own default), `timeout_seconds: 43200`, `budget: 6`.
 
 Set both keys explicitly in every run config:
@@ -69,7 +69,7 @@ Set both keys explicitly in every run config:
 ```yaml
 agent:
   template: forge          # or geak
-  model: claude-opus-5     # same id in all four arms
+  model: claude-opus-5-5   # same id in all four arms
   timeout_seconds: 43200   # same wall clock in all four arms
 target_gpu_model: MI300
 ```
@@ -324,7 +324,7 @@ REVIEW lines need a human or agent decision, recorded in the manifest.
 
 ```bash
 python3 experiments/infinity_wiki_ab/audit_run.py \
-    --arm kf --expect-model claude-opus-5 \
+    --arm kf --expect-model claude-opus-5-5 \
     --other-root /path/aka-kf_wiki --other-root /path/aka-geak --other-root /path/aka-geak_wiki \
     /path/aka-kf/workspace_MI300_forge/run_YYYYMMDD_HHMMSS
 ```

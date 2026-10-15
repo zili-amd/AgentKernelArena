@@ -23,6 +23,19 @@ Own-kernels variants of torch2hip tasks: the candidate starts empty and the
 baseline is the PyTorch module, which hands the operator to rocBLAS or ATen. A
 variant keeps the task unchanged and adds the own-kernels rule to its README;
 the harness guard refuses a candidate that calls those libraries instead.
+
+LLM-shape variants of two vLLM Triton tasks, the AWQ int4 GEMM and the FP8
+block-scaled GEMM that vLLM runs on ROCm by default: the originals' cases (N and K
+at most 512) sit at the launch floor. A variant replaces the case table with a
+real model's linear layers and keeps the kernel, wrapper, timing and tolerance.
+Its CPU references are the original loops, vectorized; the loops would take hours
+per call at these sizes. With the original uniform random nibbles and ~0.09
+scales, AWQ outputs reach 40-70 at LLM K and the production kernel's fp16
+accumulation alone exceeds the original atol, so the AWQ variant quantizes a
+Gaussian weight the way AWQ does, scales its replay perturbation instead of adding
+a constant sized for the old magnitudes, and adds a 5e-3 normwise error bound
+that an FP8-activation path would otherwise pass at M=1. Both source files were
+already editable whole, launcher included; the README gains the own-kernels rule.
     make_variants.py [--aka PATH] [--force]
 """
 from __future__ import annotations
@@ -163,6 +176,137 @@ OWN_TRITON_KERNELS_RULE = (
     "allocate outputs, check inputs, and make views or contiguous copies. The harness\n"
     "guard refuses a candidate that adds such a call.\n")
 
+# Llama-3.1-70B at TP1 with AWQ int4, group 128, as (M, N, K): vLLM on ROCm runs this kernel below
+# 256 tokens with split_k 8. Of M = 1/32/128 per layer, only the memory-bound cases that stayed near
+# or under 3% spread in three 5-round screens are kept; the other M=32 cases and every M=128 case
+# reached 4-6%.
+AWQ_CASES = [(1, 10240, 8192), (1, 8192, 8192), (1, 57344, 8192), (1, 8192, 28672), (32, 8192, 28672)]
+# DeepSeek-V3 linear layers with 128x128 FP8 blocks, the (N, K) pairs DeepGEMM tests, at decode and prefill M.
+W8A8_LAYERS = [(2112, 7168), (24576, 1536), (32768, 512), (7168, 16384), (4096, 7168), (7168, 2048)]
+
+AWQ_REFERENCE = '''def reference_awq_gemm(input_tensor, qweight, scales, qzeros, group_size):
+    """CPU reference: dequantize then matmul (the original loops, vectorized)."""
+    import torch
+    torch.set_num_threads(min(32, torch.get_num_threads()))  # shared host
+    K, N_packed = qweight.shape
+    N = N_packed * 8
+    awq_order = [0, 4, 1, 5, 2, 6, 3, 7]
+    shifts = torch.tensor([awq_order[b] * 4 for b in range(8)], dtype=torch.int32)
+
+    qweight_cpu = qweight.cpu().to(torch.int32)
+    qzeros_cpu = qzeros.cpu().to(torch.int32)
+    scales_cpu = scales.cpu().float()
+
+    dequant = torch.empty((K, N), dtype=torch.float32, device="cpu")
+    rows = max(group_size, (1 << 26) // max(N, 1) // group_size * group_size)
+    for start in range(0, K, rows):
+        end = min(start + rows, K)
+        groups = torch.arange(start, end) // group_size
+        weight_val = ((qweight_cpu[start:end].unsqueeze(-1) >> shifts) & 0xF).reshape(end - start, N)
+        zero_val = ((qzeros_cpu[groups].unsqueeze(-1) >> shifts) & 0xF).reshape(end - start, N)
+        dequant[start:end] = (weight_val - zero_val).float() * scales_cpu[groups]
+
+    input_cpu = input_tensor.cpu().float()
+    result = input_cpu @ dequant
+    return result.to(scales.dtype)
+
+
+def make_awq_weights(K, N, group_size, device):
+    """AWQ-quantize a Gaussian weight with std 1/sqrt(K): per group of rows, asymmetric
+    4-bit with scale (max - min) / 15, packed in AWQ nibble order."""
+    import torch
+    groups = K // group_size
+    weight = torch.randn(K, N, device=device, dtype=torch.float32) * K ** -0.5
+    grouped = weight.reshape(groups, group_size, N)
+    wmin, wmax = grouped.amin(dim=1), grouped.amax(dim=1)
+    scales = ((wmax - wmin) / 15).clamp_min(1e-4)
+    zeros = (-wmin / scales).round().clamp(0, 15)
+    q = (grouped / scales[:, None, :] + zeros[:, None, :]).round().clamp(0, 15).reshape(K, N)
+    del weight, grouped
+    shifts = torch.tensor([o * 4 for o in (0, 4, 1, 5, 2, 6, 3, 7)], device=device, dtype=torch.int64)
+
+    def pack(values):
+        packed = (values.to(torch.int64).reshape(values.shape[0], -1, 8) << shifts).sum(-1)
+        return torch.where(packed >= 2**31, packed - 2**32, packed).to(torch.int32)
+
+    return pack(q), scales.to(torch.float16), pack(zeros)
+
+
+'''
+W8A8_REFERENCE = '''def reference_w8a8_block_scaled_mm(A, B, As, Bs, block_size, output_dtype):
+    """CPU reference: block-wise dequantize then matmul (the original loops, vectorized)."""
+    import torch
+    torch.set_num_threads(min(32, torch.get_num_threads()))  # shared host
+    block_n, block_k = block_size
+    M, K = A.shape
+    N = B.shape[0]
+
+    A_f = A.cpu().float()
+    B_f = B.cpu().float()
+    As_f = As.cpu().float()
+    Bs_f = Bs.cpu().float()
+
+    A_dq = A_f * As_f.repeat_interleave(block_k, dim=1)[:, :K]
+    B_dq = B_f * Bs_f.repeat_interleave(block_n, dim=0)[:N].repeat_interleave(block_k, dim=1)[:, :K]
+
+    # matmul: A_dq [M,K] @ B_dq.T [K,N] = [M,N]
+    result = A_dq @ B_dq.T
+    return result.to(output_dtype)
+
+
+'''
+AWQ_RANDOM_INPUTS = '''qweight = torch.randint(0, 2**31, (K, N_packed), device=device, dtype=torch.int32)
+            scales = torch.randn(num_groups, N, device=device, dtype=dtype).abs() * 0.1 + 0.01
+            qzeros = torch.randint(0, 2**31, (num_groups, N_packed), device=device, dtype=torch.int32)'''
+AWQ_GATE = "    torch.testing.assert_close(output, expected, atol=1e-1, rtol=1e-1)\n"
+AWQ_NORMWISE_GATE = AWQ_GATE + '''    error = (output.float() - expected.float()).norm() / expected.float().norm().clamp_min(1e-12)
+    if error > 5e-3:
+        raise AssertionError(f'AWQ GEMM normwise relative error {error.item():.2e} exceeds 5e-3')
+'''
+
+# source task -> (variant task, cases, header of the case table, reference symbol, its replacement,
+#                 README introduction, README replacements, task-file replacements beyond the case table)
+LLM_SHAPE_VARIANTS = {
+    "triton2triton/vllm/triton_awq_gemm": (
+        "triton2triton/vllm_large/triton_awq_gemm",
+        [(m, k, n // 8, 128, 8) for (m, n, k) in AWQ_CASES],
+        "# Test configs: (M, K, N_packed, group_size, split_k)",
+        "reference_awq_gemm", AWQ_REFERENCE,
+        "Its cases are decode-time linear layers of Llama-3.1-70B with AWQ int4 weights (group size 128) "
+        "on one GPU, as (M, N, K): qkv (1, 10240, 8192), o (1, 8192, 8192), gate_up (1, 57344, 8192), "
+        "down (1, 8192, 28672) and down (32, 8192, 28672). split_k is 8, the value vLLM passes; on ROCm "
+        "vLLM runs this kernel for batches below 256 tokens. The weights are a Gaussian quantized the way "
+        "AWQ does it, so scales, zero points and outputs have a real layer's magnitudes, and outputs must "
+        "also stay within 5e-3 normwise relative error of the reference. The whole source file is "
+        "editable, including the wrapper's tile sizes and split-K handling.",
+        [("use the original independent CPU AWQ unpacking and GEMM\nreference, with the original numerical gate.",
+          "use an independent CPU AWQ unpacking and GEMM\nreference (the original loops, vectorized) with the "
+          "original numerical gate\nand a 5e-3 normwise relative error bound."),
+         ("The original five scored shapes, input seeds and parameter table are unchanged.",
+          "The scored shapes and weights are this variant's; the input seeds are the original's.")],
+        [("scripts/task_runner.py", AWQ_RANDOM_INPUTS, "qweight, scales, qzeros = make_awq_weights(K, N, group_size, device)", 2),
+         ("_arena_checks.py", "scales.mul_(.5).add_(.015625)", "scales.mul_(.75)", 1),
+         ("_arena_checks.py", AWQ_GATE, AWQ_NORMWISE_GATE, 1)]),
+    "triton2triton/vllm/triton_w8a8_block_scaled_mm": (
+        "triton2triton/vllm_large/triton_w8a8_block_scaled_mm",
+        [(m, n, k, 128, 128) for (n, k) in W8A8_LAYERS for m in (128, 4096)],
+        "# Test configs: (M, N, K, block_n, block_k)",
+        "reference_w8a8_block_scaled_mm", W8A8_REFERENCE,
+        "Its cases are linear layers of DeepSeek-V3 with 128x128 FP8 blocks, the six (N, K) pairs "
+        "DeepGEMM tests: (2112, 7168), (24576, 1536), (32768, 512), (7168, 16384), (4096, 7168) and "
+        "(7168, 2048), each at M = 128 (decode) and M = 4096 (prefill). The whole source file is "
+        "editable, including the launch configuration in `w8a8_triton_block_scaled_mm`.",
+        [("against the original CPU block-dequantization/matmul oracle,",
+          "against the CPU block-dequantization/matmul oracle\n(the original loops, vectorized),"),
+         ("The five scored shapes, seeds and input magnitudes remain unchanged, including\n"
+          "the larger performance scales/operands.",
+          "The scored shapes are this variant's; seeds and input magnitudes are the\n"
+          "original's, including the larger performance scales/operands."),
+         ("in any original scored case remain failures;", "in any scored case remain failures;")],
+        []),
+}
+CASE_TABLE = re.compile(r"# Test configs:[^\n]*\nTEST_SHAPES = \[\n(?:    [^\n]*\n)+\]\n")
+
 
 def contiguous_stride(shape: list[int]) -> list[int]:
     return [math.prod(shape[i + 1:]) for i in range(len(shape))]
@@ -256,6 +400,49 @@ def write_open_launcher_variant(aka: Path, source: str, target: str, launchers: 
     return dst
 
 
+def write_llm_shape_variant(aka: Path, source: str, target: str, cases: list[tuple], header: str, reference: str,
+                            new_reference: str, intro: str, readme_edits: list[tuple[str, str]],
+                            task_edits: list[tuple[str, str, str, int]], force: bool) -> Path:
+    dst = copy_task(aka, source, target, force)
+    shutil.rmtree(dst / "build", ignore_errors=True)
+    runner = dst / "scripts/task_runner.py"
+    table = header + "\nTEST_SHAPES = [\n" + "".join(f"    {case},\n" for case in cases) + "]\n"
+    text, count = CASE_TABLE.subn(table, runner.read_text(), count=1)
+    if count != 1:
+        raise ValueError(f"{runner}: no TEST_SHAPES table")
+    text, count = re.subn(rf"^def {reference}\(.*?(?=^def run_compile)", new_reference, text, flags=re.S | re.M)
+    if count != 1:
+        raise ValueError(f"{runner}: no {reference}")
+    runner.write_text(text)
+    for relative, old, new, expected in task_edits:
+        path = dst / relative
+        if path.read_text().count(old) != expected:
+            raise ValueError(f"{path}: expected {expected} of {old.splitlines()[0]!r}")
+        path.write_text(path.read_text().replace(old, new))
+    workloads_path = dst / "workloads.json"
+    workloads = json.loads(workloads_path.read_text())
+    template = workloads["cases"][0]
+    workloads.pop("migration", None)
+    workloads["input_table"] = [list(case) for case in cases]
+    workloads["cases"] = [
+        {"test_case_id": f"perf{index + 1}", "dtype": template["dtype"],
+         "params": {"case_index": index, "configuration": list(case),
+                    "configuration_names": template["params"]["configuration_names"]},
+         "checks": list(template["checks"]), "status": "PASS"}
+        for index, case in enumerate(cases)]
+    workloads_path.write_text(json.dumps(workloads, indent=2) + "\n")
+    readme = dst / "README.md"
+    replace_once(readme, "declares all five original cases;", f"declares all {len(cases)} cases;")
+    for old, new in readme_edits:
+        replace_once(readme, old, new)
+    text = readme.read_text()
+    section = (f"## LLM-shape variant\n\n{textwrap.fill(f'This is the LLM-shape variant of `{source}`. ' + intro, 88)}"
+               f"\n\n{OWN_TRITON_KERNELS_RULE}\n")
+    heading = text.index("\n## ") + 1
+    readme.write_text(text[:heading] + section + text[heading:])
+    return dst
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--aka", type=Path, default=Path.cwd())
@@ -267,6 +454,8 @@ def main() -> int:
         print(write_open_launcher_variant(args.aka, source, target, launchers, note, args.force))
     for source, target in OWN_KERNEL_VARIANTS.items():
         print(write_own_kernels_variant(args.aka, source, target, args.force))
+    for source, spec in LLM_SHAPE_VARIANTS.items():
+        print(write_llm_shape_variant(args.aka, source, *spec, args.force))
     return 0
 
 

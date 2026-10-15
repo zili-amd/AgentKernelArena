@@ -118,6 +118,22 @@ def kernelbench_matvec(p: dict) -> float:
     return bound(2 * m * k, SIZE["fp32"] * (m * k + k + m), PEAK["fp32"])
 
 
+def awq_gemm(p: dict) -> float:
+    # fp16 x[M, K] @ dequant(int4 qweight[K, N], fp16 scales and packed int4 zeros per group) -> fp16 out[M, N]
+    m, k, n_packed, group, _ = p["configuration"]
+    n, groups = n_packed * 8, k // group
+    nbytes = k * n // 2 + groups * n * SIZE["fp16"] + groups * n_packed * 4 + (m * k + m * n) * SIZE["fp16"]
+    return bound(2 * m * n * k, nbytes, PEAK["fp16"])
+
+
+def w8a8_block_scaled_mm(p: dict) -> float:
+    # fp8 A[M, K] and B[N, K] with fp32 per-block scales -> fp16 out[M, N]
+    m, n, k, block_n, block_k = p["configuration"]
+    sk, sn = math.ceil(k / block_k), math.ceil(n / block_n)
+    return bound(2 * m * n * k, (m * k + n * k) * SIZE["fp8"] + 4 * (m * sk + sn * sk) + m * n * SIZE["fp16"],
+                 PEAK["fp8"])
+
+
 MODELS = {
     "triton2triton/geak_eval/L1/refk_fp8_blockwise_mm": refk_fp8_blockwise_mm,
     "hip2hip/others/mla_decode": mla_decode,
@@ -138,6 +154,8 @@ MODELS = {
     "torch2hip/kernelbench_own/level1/l1n95_CrossEntropyLoss": kernelbench_cross_entropy,
     "torch2hip/kernelbench_own/level1/l1n36_RMSNorm_": kernelbench_rmsnorm,
     "torch2hip/kernelbench_own/level1/l1n4_Matrix_vector_multiplication_": kernelbench_matvec,
+    "triton2triton/vllm_large/triton_awq_gemm": awq_gemm,
+    "triton2triton/vllm_large/triton_w8a8_block_scaled_mm": w8a8_block_scaled_mm,
 }
 
 

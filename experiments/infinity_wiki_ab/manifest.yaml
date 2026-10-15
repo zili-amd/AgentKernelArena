@@ -35,7 +35,9 @@ pins:
   # unrolling, kernel fusion) and sources. Re-audit leakage for the 4 tasks against 0523818 before the main
   # phase: general technique pages are the treatment being measured; a page giving a task's exact solution is not.
   wiki: {repo: AMD-BRAIN-Internal/infinity-wiki, branch: main, commit: 052381802b23d029837c84263fe2fb873e9e93a6, variant: v3-main}
-  model: claude-opus-5  # confirm the gateway's id at the pilot; identical in every arm
+  # Opus 5.5, identical in every arm. claude-opus-5-5 answered on 2026-10-15 through Claude Code 2.1.296
+  # (setup_node.sh's pin); Claude Code older than 2.1.280 cannot use this model.
+  model: claude-opus-5-5
 
 # hyperloom names the forge engine branch a forge arm installs and runs (checked out at src/<pin with - for _>);
 # knowledge_wiki names the wiki pin an arm reads (checked out at src/infinity-<pin with - for _>), or false.
@@ -59,7 +61,8 @@ selection_rule: >-
   (4) AKA's own measurement driver and a baseline spread <= 3%; (5) no wiki page
   that gives the task's solution. prefilter.py, screen_baselines.py and
   screening/ hold the screen; make_variants.py writes the production-size HIP
-  variants, the open-launcher Triton variants and the own-kernels torch2hip variants.
+  variants, the open-launcher Triton variants, the own-kernels torch2hip variants
+  and the LLM-shape vLLM variants.
 
 phases:
   pilot:
@@ -92,7 +95,9 @@ phases:
     repeats: 3
     # Screened on MI300X (5 rounds); headroom vs max(roofline, 5 us). The Triton tasks are the
     # open-launcher variants from make_variants.py; the torch2hip tasks are its own-kernels
-    # variants, whose candidate starts empty (forge's initialize workflow, then the loop).
+    # variants, whose candidate starts empty (forge's initialize workflow, then the loop). The
+    # vllm_large tasks are its LLM-shape variants of the two kernels vLLM runs on ROCm by default
+    # for AWQ and DeepSeek-V3 FP8 linear layers; their wiki leakage audit is still to do.
     tasks:
       - hip2hip/gpumode_large/SimpleMatmulModule   # 13.2x; FP32 GEMM
       - hip2hip/gpumode_large/SoftmaxModule        # 3.4x; FP32 row softmax; technique-row-reduction-kernels
@@ -103,9 +108,14 @@ phases:
       - torch2hip/kernelbench_own/level1/l1n95_CrossEntropyLoss  # 4.2x; FP32 cross entropy, 8192x1024-8192x16384
       - torch2hip/kernelbench_own/level1/l1n36_RMSNorm_  # 3.7x; FP32 RMSNorm over 64 channels
       - torch2hip/kernelbench_own/level1/l1n4_Matrix_vector_multiplication_  # 2.5x; FP32 matrix-vector, K 131072-262144
+      # 18.1x; AWQ int4 decode GEMM, Llama-3.1-70B layers at M 1 and 32. Across five screens the M=1
+      # qkv/gate_up/down cases stayed <= 0.7%, o M=1 2.9-3.5% and down M=32 1.3-5.0%.
+      - triton2triton/vllm_large/triton_awq_gemm
+      - triton2triton/vllm_large/triton_w8a8_block_scaled_mm  # 6.1x; FP8 block GEMM, DeepSeek-V3 layers at M 128 and 4096
     # Each run stops once its incumbent's mean case speedup (the KEEP objective) reaches 90% of the task's
     # roofline mean case speedup: the mean over performance cases of baseline / max(roofline, 5 us), from the
-    # screening baselines (screening/mi300x-rewrite-baselines.json, mi300x-variant-baselines.json;
+    # screening baselines (screening/mi300x-rewrite-baselines.json, mi300x-variant-baselines.json,
+    # mi300x-vllm-large-baselines.json;
     # roofline.py --stop-fraction 0.9). Both arms share each target. On the 12 h SoftmaxModule pilot all six
     # runs reached 90% in 2.6-6.6 h and ended at 91-96%, so the rest of the budget bought 0.02-0.18x.
     stop_fraction: 0.9
@@ -119,6 +129,8 @@ phases:
       torch2hip/kernelbench_own/level1/l1n95_CrossEntropyLoss: 3.874
       torch2hip/kernelbench_own/level1/l1n36_RMSNorm_: 3.429
       torch2hip/kernelbench_own/level1/l1n4_Matrix_vector_multiplication_: 1.909
+      triton2triton/vllm_large/triton_awq_gemm: 16.692
+      triton2triton/vllm_large/triton_w8a8_block_scaled_mm: 6.286
 
 schedule:
   # This round runs ARMS="kf kf_wiki" (GEAK refuses to run as root in the runtime).
@@ -133,9 +145,9 @@ preregistration:
     A failed, incorrect or unscoreable final (AKA reports 0.0) counts as 1.0.
   primary_comparison: >-
     Per (task, repeat), the paired log ratio log(kf_wiki / kf): 3 pairs per task,
-    27 over the nine main tasks.
+    33 over the eleven main tasks.
   test: >-
-    Descriptive per task (3 pairs). Over 27 pairs, the exact two-sided Wilcoxon
+    Descriptive per task (3 pairs). Over 33 pairs, the exact two-sided Wilcoxon
     signed-rank test and the bootstrap CI of the median ratio; report each pair.
   headline_numbers: quiet re-measurement (>= 5 interleaved rounds per task, same GPU) replaces in-run timings.
   secondary:
