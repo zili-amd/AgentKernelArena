@@ -164,7 +164,17 @@ preregistration:
     - held-out conditional correctness per arm
   exclusion_rule: a run that fails audit_run.py (exit 1) is excluded and rerun with the same GPU slot.
 
-invocations: []
+invocations:
+  - phase: main
+    started: 2026-10-15 04:14 UTC
+    aka: a05c6dbb   # with wiki 26ea276, hyperloom 8e24562d / hyperloom_wiki 33f0c340, Opus 5.5
+    machines:
+      - {node: shared MI300X dev node A, tasks: "triton2triton/ (6 tasks)"}
+      - {node: shared MI300X dev node B, tasks: "torch2hip/ (3 tasks)"}
+    schedule: >-
+      by-task waves: one task at a time per machine, its 3 repeats of kf and kf_wiki at once on GPUs 0-5,
+      12 h per run (the 90% stop rule can end a run earlier); the next task starts after all six runs end.
+      The hip2hip main tasks are not part of this invocation.
 exclusions:
   - runs: pilot hip2hip/gpumode_large/SimpleMatmulModule r0-r2, kf and kf_wiki (started 2026-10-13 20:55 UTC)
     stopped: 2026-10-13 21:45 UTC, before any KEEP
