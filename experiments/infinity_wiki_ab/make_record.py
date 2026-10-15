@@ -164,6 +164,12 @@ class Record:
         parts = [f"Each case's bound is max(FLOPs / peak, bytes / HBM bandwidth) on MI300X ({peaks} TFLOP/s dense, "
                  f"HBM {roofline.BW / 1e12:.1f} TB/s); its effective bound adds the "
                  f"{roofline.LAUNCH_FLOOR_S * 1e6:.0f} µs launch floor an optimal kernel still pays (`roofline.py`)."]
+        if attained := sorted(roofline.ATTAINED_TASKS & set(self.tasks)):
+            rates = roofline.ATTAINED_READ_BYTES_PER_S.values()
+            parts.append(f"{', '.join(attained)} bound against attained figures instead (`measure_peaks.py`): "
+                         + ", ".join(f"{dtype.upper()} {flops / 1e12:.0f}" for dtype, flops in roofline.ATTAINED_PEAK.items())
+                         + f" TFLOP/s, and a read rate by working-set size from {min(rates) / 1e12:.1f} to "
+                         f"{max(rates) / 1e12:.1f} TB/s, timed without a cache flush as AKA times.")
         ceiling_rows = []
         for task in self.tasks:
             cases = self.baselines.get(task, {})
