@@ -91,7 +91,10 @@ class Record:
         # Only this experiment's arms: the ledger also holds runs of arms an earlier pack ran.
         self.runs = [run for run in (collect_results.runs(root, phase) if (root / "invocations.jsonl").is_file() else [])
                      if run["arm"] in self.arms]
-        self.records = sorted((collect_results.measure(root, run) for run in self.runs),
+        targets = self.spec.get("speedup_targets") or {}
+        self.records = sorted((collect_results.measure(root, run, target=targets.get(run["task"]),
+                                                       horizon_sec=self.spec.get("timeout_seconds"))
+                               for run in self.runs),
                               key=lambda r: (r["task"], r["repeat"], r["arm"]))
         self.tasks = list(self.spec.get("tasks") or sorted({r["task"] for r in self.records}))
         # Each task's starting point, from the first run that measured it.
@@ -219,16 +222,27 @@ class Record:
             rows.append([r["task"].split("/", 1)[-1], r["repeat"], r["arm"], r["gpu"], r["exit_code"],
                          "yes" if r["passed"] else "no", f"{r['speedup']:.4f}",
                          f"{r['speedup'] / ceiling:.1%}" if ceiling else "-", roof,
+                         f"{r['hours_to_target']:.2f} h" if r["hours_to_target"] is not None else "-",
+                         f"{r['time_avg_speedup']:.4f}" if r["time_avg_speedup"] is not None else "-",
+                         f"{r['guided_hours']:.2f} h ({r['guided_exit']})" if r["guided_hours"] is not None else "-",
                          f"${r['cost_usd']:.2f}" if r["cost_usd"] is not None else "-",
                          f"{r['wiki_calls']} {r['wiki_calls_by_role'] or ''}".strip(),
                          audit_verdict(self.root, by_suffix[r["run_suffix"]], self.arms, model, host)])
         parts = ["Speedup is AKA's mean of per-case speedups; a failed, incorrect or unscoreable run counts as "
                  "1.0. *Share of ceiling* is speedup / the per-case mean ceiling; *roofline* is Σ bound / Σ final "
-                 "time.\n", table(["Task", "Repeat", "Arm", "GPU", "Exit", "Pass", "Speedup", "Share of ceiling",
-                                    "Roofline", "Cost", "KB calls", "Audit"], rows)]
+                 "time. *To target* is the hours from the run's start until forge's incumbent first reached the "
+                 "task's speedup target; *time-avg* is that incumbent's best speedup averaged over the "
+                 f"{self.spec['timeout_seconds'] / 3600:g} h budget, holding its last value once the run ends; "
+                 "*GUIDED* is how long a --wiki-guided run planned from its playbook and why it stopped.\n",
+                 table(["Task", "Repeat", "Arm", "GPU", "Exit", "Pass", "Speedup", "Share of ceiling", "Roofline",
+                        "To target", "Time-avg", "GUIDED", "Cost", "KB calls", "Audit"], rows)]
         summary = collect_results.summarize(self.records, *(self.arms + ["", ""])[:2])
-        parts.append("\n" + table(["Arm", "Runs", "Pass rate", "Mean speedup", "Geomean", "Cost", "KB calls"], [
+        parts.append("\n" + table(["Arm", "Runs", "Pass rate", "Mean speedup", "Geomean", "Reached target",
+                                   "Median h to target", "Mean time-avg", "Cost", "KB calls"], [
             [arm, s["runs"], f"{s['pass_rate']:.0%}", f"{s['arithmetic_mean']:.4f}", f"{s['geometric_mean']:.4f}",
+             f"{s['reached_target']}/{s['runs']}",
+             f"{s['median_hours_to_target']:.2f}" if s["median_hours_to_target"] is not None else "-",
+             f"{s['mean_time_avg_speedup']:.4f}" if s["mean_time_avg_speedup"] is not None else "-",
              f"${s['cost_usd']:.2f}", s["wiki_calls"]] for arm, s in summary["arms"].items()]))
         # Every arm against every later one: with kf first, each wiki arm against kf, then the wiki arms.
         for control, treatment in itertools.combinations(self.arms, 2):
@@ -236,11 +250,25 @@ class Record:
             if not summary["pairs"]:
                 continue
             ci = summary["median_ratio_ci95"]
+            avg_ci = summary["time_avg_ratio_ci95"]
+
+            def hours(value):
+                return f"{value:.2f}" if value is not None else "-"
+
             parts.append(f"\n**{treatment} over {control}**: {len(summary['pairs'])} pair(s), median ratio "
                          f"{summary['median_ratio']:.4f}" + (f", bootstrap 95% CI {ci[0]:.4f} to {ci[1]:.4f}" if ci else "")
                          + (f", exact Wilcoxon p = {summary['wilcoxon_p']:.4f}" if summary["wilcoxon_p"] is not None else "")
-                         + ".\n\n" + table(["Task", "Repeat", "Ratio"], [[p["task"], p["repeat"], f"{p['ratio']:.4f}"]
-                                                                          for p in summary["pairs"]]))
+                         + (f"; time-averaged best speedup median ratio {summary['median_time_avg_ratio']:.4f}"
+                            + (f", bootstrap 95% CI {avg_ci[0]:.4f} to {avg_ci[1]:.4f}" if avg_ci else "")
+                            + (f", exact Wilcoxon p = {summary['time_avg_wilcoxon_p']:.4f}"
+                               if summary["time_avg_wilcoxon_p"] is not None else "")
+                            if summary["median_time_avg_ratio"] is not None else "")
+                         + ".\n\n" + table(
+                             ["Task", "Repeat", "Ratio", "Time-avg ratio", f"h to target ({control} / {treatment})"],
+                             [[p["task"], p["repeat"], f"{p['ratio']:.4f}",
+                               f"{p['time_avg_ratio']:.4f}" if p["time_avg_ratio"] is not None else "-",
+                               f"{hours(p['hours_to_target'][0])} / {hours(p['hours_to_target'][1])}"]
+                              for p in summary["pairs"]]))
         return "\n".join(parts)
 
     def render(self, previous: str) -> str:

@@ -28,6 +28,12 @@ pins:
   # sets per task (phases.main.speedup_targets) so a run stops at 90% of its roofline mean case speedup.
   hyperloom: {repo: AMD-AGI/Hyperloom, branch: forge-reasoning-main, commit: 8e24562d7bd87795317fcbca8338acd63f449d8f}
   hyperloom_wiki: {repo: AMD-AGI/Hyperloom, branch: forge-knowledge-wiki-reasoning-main, commit: 33f0c340a78a497b776b8ee0d665fa2fffcc432c}
+  # The guided round's engine (arm kf_wiki_guided): hyperloom_wiki plus forge-loop --wiki-guided (528b463e), which
+  # first builds a playbook from the knowledge base and plans from it -- one whole open group per lane, cited and
+  # credited from the measured plan -- until it is spent, the search stalls or 35% of the budget is used, then plans
+  # freely; and (ccf5f599) GUIDED rounds analyze each open group whole in place of the compute, memory and
+  # algorithm specialists, which FREE rounds keep. Without --wiki-guided it plans as hyperloom_wiki.
+  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: forge-wiki-guided, commit: ccf5f599b8d7911ca492bc157467f7fcaf5da129}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
   # Test with infinity-wiki PR #1 (branch gfx942-memory-bound-reduction-gemv), one commit on main cdcda80.
   # Over the previous pin 0523818: main cdcda80 adds Hyperloom's knowledge cards (sources/community-kb) and the
@@ -47,9 +53,15 @@ pins:
 # knowledge_wiki names the wiki pin an arm reads (checked out at src/infinity-<pin with - for _>), or false.
 # This round is test A (kf: hyperloom, no wiki) vs test B (kf_wiki: hyperloom_wiki, reads main); they differ
 # only by the wiki integration and the knowledge base, so the comparison isolates the wiki's effect.
+# The guided round is kf vs kf_wiki_guided (deploy and pack with ARMS="kf kf_wiki_guided"): the same knowledge
+# base as kf_wiki, but the loop plans from a playbook it builds from it before planning freely. It changes the
+# workflow together with the knowledge base, so that comparison measures the two together; its primary reading is
+# the time to each task's speedup target and the time-averaged best speedup (collect_results.py), since the stop
+# rule truncates final speedups.
 arms:
   kf: {template: forge, hyperloom: hyperloom, knowledge_wiki: false}
   kf_wiki: {template: forge, hyperloom: hyperloom_wiki, knowledge_wiki: wiki}
+  kf_wiki_guided: {template: forge, hyperloom: hyperloom_wiki_guided, knowledge_wiki: wiki, wiki_guided: true}
   geak: {template: geak, knowledge_wiki: false}
   geak_wiki: {template: geak, knowledge_wiki: wiki}
 
