@@ -148,15 +148,26 @@ def performance_cases(aka: Path, task: str) -> list[dict]:
     return [c for c in cases if "performance" in (c.get("checks") or ["performance"])]
 
 
+def roofline_speedup(effective: dict[str, float], times_ms: dict[str, float]) -> float:
+    """The mean case speedup a kernel at every case's effective bound would score: the KEEP objective's ceiling."""
+    common = [cid for cid in effective if cid in times_ms]
+    return sum(times_ms[c] / 1e3 / effective[c] for c in common) / len(common)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--aka", type=Path, required=True)
     parser.add_argument("--manifest", type=Path, default=Path(__file__).resolve().parent / "manifest.yaml")
-    parser.add_argument("--baselines", type=Path, help="JSON from screen_baselines.py")
+    parser.add_argument("--baselines", type=Path, action="append", default=[],
+                        help="JSON from screen_baselines.py (repeatable)")
     parser.add_argument("--task", action="append", default=[], help="bound these tasks instead of the manifest's")
+    parser.add_argument("--stop-fraction", type=float,
+                        help="also print each task's stop target: this fraction of its roofline mean case speedup")
     args = parser.parse_args()
     candidates = args.task or yaml.safe_load(args.manifest.read_text())["phases"]["screening"]["candidates"]
-    measured = json.loads(args.baselines.read_text()) if args.baselines else {}
+    measured = {}
+    for path in args.baselines:
+        measured.update(json.loads(path.read_text()))
     rows = []
     for task in candidates:
         if task not in MODELS:
@@ -171,9 +182,14 @@ def main() -> int:
             common = [cid for cid in effective if cid in times]
             row["headroom"] = sum(times[c] / 1e3 for c in common) / sum(effective[c] for c in common)
             row["selected"] = row["headroom"] >= MIN_HEADROOM
+            row["roofline_speedup"] = roofline_speedup(effective, times)
         rows.append(row)
     for row in rows:
         extra = (f"  headroom={row['headroom']:.1f}x selected={row['selected']}" if "headroom" in row else "")
+        if "roofline_speedup" in row:
+            extra += f"  roofline_mean_case_speedup={row['roofline_speedup']:.3f}x"
+            if args.stop_fraction:
+                extra += f"  stop_at={args.stop_fraction * row['roofline_speedup']:.3f}x"
         print(f"{row['task']:55} cases={row['cases']:4} median_roofline={row['median_bound_us']:9.2f}us "
               f"cases_at_launch_floor={row['share_at_floor']:.0%}{extra}")
     return 0

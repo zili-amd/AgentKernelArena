@@ -57,10 +57,14 @@ def probe() -> dict:
     applyback_optional = "applyback" in {parameter.name for parameter in rewrite.params}
     # An engine without it would run a knowledge-base arm with no knowledge base.
     knowledge_wiki_tool = importlib.util.find_spec("kernelforge.knowledge.wiki_tool") is not None
+    # An engine without it would run past a speedup target to its time budget.
+    loop_parameters = {parameter.name for parameter in cli.main.commands["forge-loop"].params}
+    speedup_target = "target_mean_case_speedup" in loop_parameters
     return {"adapter_api": ADAPTER_API, "version": version,
             "initialization_targets": ["flydsl", "hip", "triton"],
             "backends": sorted(KERNEL_BACKENDS), "rewrite_target": "flydsl",
-            "applyback_optional": applyback_optional, "knowledge_wiki_tool": knowledge_wiki_tool}
+            "applyback_optional": applyback_optional, "knowledge_wiki_tool": knowledge_wiki_tool,
+            "speedup_target": speedup_target}
 
 
 def main(argv=None):

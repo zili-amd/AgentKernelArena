@@ -26,6 +26,11 @@ def run_config(manifest: dict, phase: dict, task: str, arm: str) -> dict:
              "timeout_seconds": phase["timeout_seconds"]}
     if spec["template"] == "forge":
         agent["experience_kb"] = "isolated"
+        targets = phase.get("speedup_targets")
+        if targets is not None:
+            if task not in targets:
+                raise ValueError(f"the phase sets speedup targets but none for {task}")
+            agent["target_mean_case_speedup"] = targets[task]
     config = {"agent": agent, "tasks": [task], "target_gpu_model": "MI300",
               "log_directory": "logs", "workspace_directory_prefix": "workspace"}
     if spec["knowledge_wiki"]:

@@ -449,7 +449,7 @@ def test_action_budget_is_capped_by_remaining_campaign(tmp_path):
 
 
 def mock_engine(monkeypatch, *, fail=False, port_ok=True, timeout=False, applyback_optional=False,
-                knowledge_wiki_tool=True):
+                knowledge_wiki_tool=True, speedup_target=True):
     commands = []
     real_run = subprocess.run
     def subprocess_run(command, **kwargs):
@@ -457,7 +457,7 @@ def mock_engine(monkeypatch, *, fail=False, port_ok=True, timeout=False, applyba
             return SimpleNamespace(returncode=0, stdout=json.dumps(
                 {"backends": ["flydsl", "hip", "triton"], "adapter_api": 1,
                  "applyback_optional": applyback_optional,
-                 "knowledge_wiki_tool": knowledge_wiki_tool}), stderr="")
+                 "knowledge_wiki_tool": knowledge_wiki_tool, "speedup_target": speedup_target}), stderr="")
         return real_run(command, **kwargs)
     monkeypatch.setattr(adapter.subprocess, "run", subprocess_run)
     monkeypatch.setattr(adapter, "_resolve_gpu_arch", lambda _: "gfx950")
@@ -1114,6 +1114,37 @@ def test_experience_kb_engine_mode_keeps_the_engine_store(tmp_path, monkeypatch)
     assert env["KB_STORE_URL"] == "https://kb.example"
     assert "KNOWLEDGE_LOCAL_ROOT" not in env and "KNOWLEDGE_STORE_MODE" not in env
     assert json.loads(status.read_text())["experience_kb"] == {"mode": "engine"}
+
+
+def _launched_command(tmp_path, monkeypatch, eval_config, **engine):
+    context, _, _ = fixture_task(tmp_path)
+    monkeypatch.setenv("ARENA_TASK_CONTEXT", str(context.path))
+    commands = mock_engine(monkeypatch, **engine)
+    adapter.launch(eval_config, "unused", str(context.workspace))
+    command, = commands
+    return command
+
+
+def test_a_speedup_target_reaches_forge_loop(tmp_path, monkeypatch):
+    command = _launched_command(tmp_path, monkeypatch, {"agent": {"target_mean_case_speedup": 3.15}})
+    assert "forge-loop" in command
+    assert command[command.index("--target-mean-case-speedup") + 1] == "3.15"
+
+
+def test_forge_loop_runs_to_its_budget_without_a_speedup_target(tmp_path, monkeypatch):
+    command = _launched_command(tmp_path, monkeypatch, {})
+    assert "forge-loop" in command and "--target-mean-case-speedup" not in command
+
+
+def test_a_speedup_target_refuses_an_engine_that_would_ignore_it(tmp_path, monkeypatch):
+    with pytest.raises(adapter.ForgeRunError, match="no --target-mean-case-speedup"):
+        _launched_command(tmp_path, monkeypatch, {"agent": {"target_mean_case_speedup": 3.15}}, speedup_target=False)
+
+
+@pytest.mark.parametrize("value", [1, 0.5, -2.0, float("inf"), True, "3.15"])
+def test_a_speedup_target_is_off_or_above_one(value):
+    with pytest.raises(ValueError, match="target_mean_case_speedup"):
+        adapter._config({"agent": {"target_mean_case_speedup": value}})
 
 
 def test_experience_kb_rejects_unknown_mode():

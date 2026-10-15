@@ -374,8 +374,12 @@ Search defaults live in [agent_config.yaml](agent_config.yaml); the run may
 override `workflow`, `model`, `agent_backend`, `permission_mode`,
 `timeout_seconds`, `session_timeout_seconds`, `max_port_attempts`,
 `initialization_max_attempts`, `initialization_budget_fraction`,
-`supervisor_backend`, `experience_kb`, and `python`. An empty supervisor follows
-the selected backend. Lane count, task preparation, profiling and planning probes
+`supervisor_backend`, `experience_kb`, `target_mean_case_speedup`, and `python`.
+An empty supervisor follows the selected backend. A nonzero
+`target_mean_case_speedup` (above 1) is passed as forge-loop
+`--target-mean-case-speedup`, which ends the loop once the incumbent's mean
+per-case speedup reaches it; the run refuses an engine whose forge-loop lacks
+the option, and a FlyDSL rewrite, which has no such stop. Lane count, task preparation, profiling and planning probes
 follow the engine defaults. Arena publishes the task and leaves the search policy
 to Forge, except for the Experience KB below.
 

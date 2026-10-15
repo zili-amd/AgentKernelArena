@@ -14,6 +14,9 @@ initialization_max_attempts: 3
 initialization_budget_fraction: 0.4
 # Empty follows agent_backend; no accidental provider/model mismatch.
 supervisor_backend: ""
+# End the optimization loop once the incumbent's mean per-case speedup reaches
+# this value (forge-loop --target-mean-case-speedup); 0 runs to the time budget.
+target_mean_case_speedup: 0
 # isolated: each invocation reads and publishes only a fresh, empty Experience
 # KB in its own artifact directory, so no run warm-starts from another run's
 # solutions. engine: the engine's own store and warm-start defaults.
