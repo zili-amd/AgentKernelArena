@@ -93,7 +93,8 @@ phases:
     # vllm triton_decode_attn_stage1 (max_seq 128) and the hip2hip/gpumode modules
     # (4x4x4-sized inputs) are launch-bound; fused_moe_mxfp4 needs gfx950.
   main:
-    timeout_seconds: 8100
+    # 12 h per run, as in the 12 h pilots; the 90% stop rule below can end a run earlier.
+    timeout_seconds: 43200
     repeats: 3
     # Screened on MI300X (5 rounds); headroom vs max(roofline, 5 us). The Triton tasks are the
     # open-launcher variants from make_variants.py; the torch2hip tasks are its own-kernels
@@ -136,9 +137,13 @@ phases:
 
 schedule:
   # This round runs ARMS="kf kf_wiki" (GEAK refuses to run as root in the runtime).
-  # One (task, repeat) takes two GPUs; arm i in repeat r runs on GPU base + (i + r) % 2.
+  # One (task, repeat) takes two GPUs; arm i in repeat r runs on GPU base + (i + r + task index) % 2.
   arms_per_pair: 2
   gpu_bases: [0, 2, 4, 6]
+  # by-task: one machine per task family (start.sh main --tasks "triton2triton/" on one, "torch2hip/" on
+  # the other); each machine runs one task at a time, its three repeats of both arms at once on six GPUs,
+  # and starts the next task only after all six runs have ended.
+  waves: by-task
 
 preregistration:
   primary_metric: >-
