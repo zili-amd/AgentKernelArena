@@ -210,7 +210,7 @@ class Record:
             common = [c for c in bound if c in optimized]
             roof = (f"{sum(bound[c] for c in common) / sum(optimized[c]['execution_time_ms'] / 1e3 for c in common):.1%}"
                     if common and r["passed"] else "-")
-            rows.append([r["task"].rsplit("/", 1)[-1], r["repeat"], r["arm"], r["gpu"], r["exit_code"],
+            rows.append([r["task"].split("/", 1)[-1], r["repeat"], r["arm"], r["gpu"], r["exit_code"],
                          "yes" if r["passed"] else "no", f"{r['speedup']:.4f}",
                          f"{r['speedup'] / ceiling:.1%}" if ceiling else "-", roof,
                          f"${r['cost_usd']:.2f}" if r["cost_usd"] is not None else "-",

@@ -54,7 +54,9 @@ pids=()
 for i in "${!ARMS[@]}"; do
     arm="${ARMS[$i]}"
     gpu=$(( GPU_BASE + (i + REPEAT + ROTATE) % ${#ARMS[@]} ))
-    tag="${PHASE}-${TASK##*/}-r${REPEAT}-${arm}"
+    # The task path without its category, so tasks sharing a basename (two */gemm) keep separate homes and results.
+    task_id="${TASK#*/}"
+    tag="${PHASE}-${task_id//\//.}-r${REPEAT}-${arm}"
     env_args=()
     for name in "${UNSET[@]}"; do env_args+=(-u "$name"); done
     # HOME lives in this arm's own checkout (mounted at /workspace) so the agent
