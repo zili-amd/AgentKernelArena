@@ -32,8 +32,12 @@ pins:
   # first builds a playbook from the knowledge base and plans from it -- one whole open group per lane, cited and
   # credited from the measured plan -- until it is spent, the search stalls or 35% of the budget is used, then plans
   # freely; and (ccf5f599) GUIDED rounds analyze each open group whole in place of the compute, memory and
-  # algorithm specialists, which FREE rounds keep. Without --wiki-guided it plans as hyperloom_wiki.
-  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: forge-wiki-guided, commit: ccf5f599b8d7911ca492bc157467f7fcaf5da129}
+  # algorithm specialists, which FREE rounds keep. 5363a8ad, after the first guided invocation: every GUIDED round
+  # first re-ranks the open groups against its own profile and case timings (the builder's order was fixed for the
+  # whole phase), a lane candidate a sibling's KEEP stopped applying is ported onto the current kernel by an
+  # Implementer instead of dropped, and the 35% share is of the budget left when GUIDED began, after at least two
+  # GUIDED rounds. Without --wiki-guided it plans as hyperloom_wiki.
+  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: forge-wiki-guided, commit: 5363a8ad08b3c1be5a3d7c115c52c7cdf9e11185}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
   # Test with infinity-wiki PR #1 (branch gfx942-memory-bound-reduction-gemv), one commit on main cdcda80.
   # Over the previous pin 0523818: main cdcda80 adds Hyperloom's knowledge cards (sources/community-kb) and the
@@ -204,9 +208,10 @@ invocations:
     finding: >-
       Every kf_wiki_guided run left GUIDED for FREE (GUIDED_BUDGET_SPENT) when its second round began, at 41-44%
       of the budget: the 35% guided share is counted from the loop's start, so ~25 min of baseline and initial
-      analysis and ~20 min of post-KEEP processing spend it on a 3 h run, and GUIDED planned a single round. To
-      fix in Hyperloom before the next guided round: count the guided share from the first planning round and
-      guarantee at least two GUIDED rounds.
+      analysis and ~20 min of post-KEEP processing spend it on a 3 h run, and GUIDED planned a single round. In 11
+      of the 12 runs, kf and kf_wiki_guided alike, the round's second lane no longer applied once the first was
+      kept and was dropped unmeasured, so each round measured one direction; and the playbook's group order, fixed
+      when it was built, kept the M=1 GEMV out of AWQ r2's first round. Fixed in hyperloom_wiki_guided 5363a8ad.
   - phase: main
     started: 2026-10-15 04:14 UTC
     aka: a05c6dbb   # with wiki 26ea276, hyperloom 8e24562d / hyperloom_wiki 33f0c340, Opus 5.5
