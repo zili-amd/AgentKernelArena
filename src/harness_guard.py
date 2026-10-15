@@ -445,9 +445,11 @@ def runtime_patching_sites(source: str) -> Counter:
 # calls the task's own starting file lacks are refused.
 _CXX_SUFFIXES = frozenset({".hip", ".cu", ".cuh", ".cpp", ".cc", ".cxx", ".h", ".hh", ".hpp"})
 _LIBRARY_OPERATORS = re.compile(
-    r"\b(?:hipblas|rocblas|tensile|miopen)\w*"
-    r"|\b(?:at|torch)::(?:matmul|mm|bmm|addmm|baddbmm|addbmm|linear|einsum|softmax|log_softmax|_softmax)\b"
-    r"|\.(?:matmul|mm|bmm|addmm|baddbmm|softmax|log_softmax)\s*\(",
+    r"\b(?:hipblas|rocblas|tensile|miopen)\w*|\bat::cuda::blas::\w+"
+    r"|\b(?:at|torch)::(?:nn::functional::|native::)?(?:matmul|mm|bmm|addmm|baddbmm|addbmm|mv|addmv|dot|vdot"
+    r"|linear|einsum|softmax|log_softmax|_softmax|logsumexp|cross_entropy|cross_entropy_loss|nll_loss\w*"
+    r"|rms_norm|layer_norm|native_layer_norm|group_norm|batch_norm|norm|mean|sum)\b"
+    r"|\.(?:matmul|mm|bmm|addmm|baddbmm|mv|addmv|dot|softmax|log_softmax|logsumexp|mean|sum|norm)\s*\(",
     re.IGNORECASE)
 _CXX_COMMENTS = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
 _CALL_PUNCTUATION = re.compile(r"[\s(]")

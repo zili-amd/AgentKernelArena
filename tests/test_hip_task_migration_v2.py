@@ -57,10 +57,10 @@ def harness_namespace(task):
 
 
 def test_inventory():
-    assert len(CONFIGS) == 89
-    assert len(EXTENSIONS) == 79 and len(NATIVE) == 10
-    assert len([p for p in CONFIGS if p.is_relative_to(ROOT / 'tasks/hip2hip')]) == 32
-    assert sum(len(json.loads(p.with_name('workload.json').read_text())['cases']) for p in CONFIGS) == 551
+    assert len(CONFIGS) == 94
+    assert len(EXTENSIONS) == 84 and len(NATIVE) == 10
+    assert len([p for p in CONFIGS if p.is_relative_to(ROOT / 'tasks/hip2hip')]) == 34
+    assert sum(len(json.loads(p.with_name('workload.json').read_text())['cases']) for p in CONFIGS) == 582
 
 
 @pytest.mark.parametrize('path', CONFIGS, ids=lambda p: str(p.parent.relative_to(ROOT / 'tasks')))
@@ -436,6 +436,11 @@ GPU_VALIDATOR_REPAIR_DIGESTS = {'hip2hip/gpumode/GELU': (11, '4f9540b61f00d8e22d
 # Reviewed PR105 additions: analytic nonuniform backward checks and a separate
 # candidate translation unit. CPU known answers/macro counterexamples live in
 # test_quality_loop_task_hardening.py and test_pr107_main_integration.py.
+# Production-size variants replace get_inputs(); own-kernels variants must keep their source task's code.
+VARIANT_DIGESTS = {'hip2hip/gpumode_large/SimpleMatmulModule': (11, '87ce3b2ae117330deb0a9cfd0ed66f4db7d3950a07a97de8061f9e543ffe8872'),
+                   'hip2hip/gpumode_large/SoftmaxModule': (11, '49e03c0b74d2e1c2c572a16ea5131dbb97d6d271d97a8efe13767a03d5040713')}
+OWN_KERNEL_VARIANT_SOURCES = {f'torch2hip/kernelbench_own/level1/{name}': f'torch2hip/kernelbench/level1/{name}'
+                              for name in ('l1n95_CrossEntropyLoss', 'l1n36_RMSNorm_', 'l1n4_Matrix_vector_multiplication_')}
 PR105_NATIVE_FILES = {
     'hip2hip/others/assign_score_withk/scripts/task_runner.py': 'b5deaa21ca87e7c6ac22e3b982e9d3c193a539711ba958d3156ecbf670eb0ddf',
     'hip2hip/others/mla_decode/mla_decode.hip': 'f48e56e755604ac9b1ea374ec5cdb5b33daece75224b07b523f51d14c1aa78cd',
@@ -468,7 +473,9 @@ def test_original_code_case_seed_tolerance_and_timing_preserved(path):
             assert 'source/kernel.hpp' in path.with_name('Makefile').read_text()
         digest.update(str(p.relative_to(path.parent)).encode() + b'\0' + content + b'\0')
     relative = str(path.parent.relative_to(ROOT / 'tasks'))
-    assert (len(files), digest.hexdigest()) == GPU_VALIDATOR_REPAIR_DIGESTS.get(relative, ORIGINAL_SOURCE_DIGESTS[relative])
+    source = OWN_KERNEL_VARIANT_SOURCES.get(relative, relative)
+    expected = VARIANT_DIGESTS.get(relative) or GPU_VALIDATOR_REPAIR_DIGESTS.get(source) or ORIGINAL_SOURCE_DIGESTS[source]
+    assert (len(files), digest.hexdigest()) == expected
 
 
 @pytest.mark.parametrize('role', ['baseline', 'candidate'])
