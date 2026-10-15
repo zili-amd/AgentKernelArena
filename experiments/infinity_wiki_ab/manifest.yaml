@@ -213,6 +213,13 @@ invocations:
       were renamed in place with a stopped-v1- prefix on both nodes before this launch; nothing of it is read
       by this invocation's record.
   - phase: guided
+    started: 2026-10-15 23:36 UTC
+    aka: e2c85ba5   # with wiki ca5d232, hyperloom 8e24562d (kf) / hyperloom_wiki_guided 5363a8ad (kf_wiki_guided), Opus 5.5
+    arms: kf kf_wiki_guided
+    machines:
+      - {node: shared MI300X dev node E, tasks: triton2triton/rocmbench_open/hard/test_flashattention_fwd}
+    schedule: its 3 repeats of both arms at once on GPUs 0-5, 3 h per run, 90% stop rule.
+  - phase: guided
     started: 2026-10-15 20:41 UTC
     aka: 56feb031   # with wiki ca5d232, hyperloom 8e24562d (kf) / hyperloom_wiki_guided ccf5f599 (kf_wiki_guided), Opus 5.5
     arms: kf kf_wiki_guided
