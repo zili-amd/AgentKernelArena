@@ -68,7 +68,7 @@ rule. Paths are relative to the repository root. Hyperloom paths are relative to
 
 ## Rule 2: model and budget parity
 
-- AKA `agents/forge/agent_config.yaml` contains `model: claude-opus-5`, `timeout_seconds: 87300`, `session_timeout_seconds: 3600` and `initialization_budget_fraction: 0.4`.
+- AKA `agents/forge/agent_config.yaml` contains `model: claude-opus-5-5`, `timeout_seconds: 87300`, `session_timeout_seconds: 3600` and `initialization_budget_fraction: 0.4`.
 - AKA `agents/geak/agent_config.yaml` contains `model: null`, `effort: high`, `budget: 6`, `min_improve: 0.02`, `deep_cost: 2` and `timeout_seconds: 43200`.
 - AKA `agents/geak/launch_agent.py`:
   - `:32-47`: any key of `agent_config.yaml` can be overridden from the run config's `agent:` mapping.
