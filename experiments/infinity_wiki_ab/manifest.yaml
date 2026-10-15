@@ -24,9 +24,10 @@ pins:
   # reason). Both also keep each fan-out lane's own rationale for the iteration that measures it (the 12 h long
   # job on 816718bc0 / 1d51fd5b8 logged only "lane N of a fan-out round"), and both let a declared test_*.py
   # target escape the test-name protection (c4a848920): without it every edit to the attention task's
-  # test_flashattention_fwd.py is denied.
-  hyperloom: {repo: AMD-AGI/Hyperloom, branch: forge-reasoning-main, commit: 04cc1a9c9d59de04007a98783c0a9e9b60c5e621}
-  hyperloom_wiki: {repo: AMD-AGI/Hyperloom, branch: forge-knowledge-wiki-reasoning-main, commit: 55d81457ab6d53f8833e24d34ac0eaa9bea9b6b1}
+  # test_flashattention_fwd.py is denied. Both also take --target-mean-case-speedup, which the main phase
+  # sets per task (phases.main.speedup_targets) so a run stops at 90% of its roofline mean case speedup.
+  hyperloom: {repo: AMD-AGI/Hyperloom, branch: forge-reasoning-main, commit: 8e24562d7bd87795317fcbca8338acd63f449d8f}
+  hyperloom_wiki: {repo: AMD-AGI/Hyperloom, branch: forge-knowledge-wiki-reasoning-main, commit: 33f0c340a78a497b776b8ee0d665fa2fffcc432c}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
   # Test with main. main 0523818 merges the gfx942-technique-context branch (row reductions, HIP MFMA GEMM
   # structure, GEMM tile scheduling, plus the earlier FP8/MFMA-layout/FA/MoE/latency/Triton/XCD pages) and adds
@@ -68,6 +69,8 @@ phases:
     repeats: 3
     tasks:
       - hip2hip/gpumode_large/SimpleMatmulModule   # 13.2x; technique-hip-mfma-gemm-tiling, hw-mfma, hw-mfma-operand-layout-cdna3
+    speedup_targets:
+      hip2hip/gpumode_large/SimpleMatmulModule: 11.458
   screening:
     # The previous round's screen (screening/mi300x-screening.txt). This round's candidates are
     # screening/rewrite-candidates*.txt, screened with screen_baselines.py --only.
@@ -100,6 +103,22 @@ phases:
       - torch2hip/kernelbench_own/level1/l1n95_CrossEntropyLoss  # 4.2x; FP32 cross entropy, 8192x1024-8192x16384
       - torch2hip/kernelbench_own/level1/l1n36_RMSNorm_  # 3.7x; FP32 RMSNorm over 64 channels
       - torch2hip/kernelbench_own/level1/l1n4_Matrix_vector_multiplication_  # 2.5x; FP32 matrix-vector, K 131072-262144
+    # Each run stops once its incumbent's mean case speedup (the KEEP objective) reaches 90% of the task's
+    # roofline mean case speedup: the mean over performance cases of baseline / max(roofline, 5 us), from the
+    # screening baselines (screening/mi300x-rewrite-baselines.json, mi300x-variant-baselines.json;
+    # roofline.py --stop-fraction 0.9). Both arms share each target. On the 12 h SoftmaxModule pilot all six
+    # runs reached 90% in 2.6-6.6 h and ended at 91-96%, so the rest of the budget bought 0.02-0.18x.
+    stop_fraction: 0.9
+    speedup_targets:
+      hip2hip/gpumode_large/SimpleMatmulModule: 11.458
+      hip2hip/gpumode_large/SoftmaxModule: 3.134
+      triton2triton/rocmbench_open/hard/test_flashattention_fwd: 8.228
+      triton2triton/geak_eval_open/L3/gemm: 15.531
+      triton2triton/rocmbench_open/hard/gemm: 2.463
+      triton2triton/rocmbench_open/medium/naive_softmax: 19.019
+      torch2hip/kernelbench_own/level1/l1n95_CrossEntropyLoss: 3.874
+      torch2hip/kernelbench_own/level1/l1n36_RMSNorm_: 3.429
+      torch2hip/kernelbench_own/level1/l1n4_Matrix_vector_multiplication_: 1.909
 
 schedule:
   # This round runs ARMS="kf kf_wiki" (GEAK refuses to run as root in the runtime).

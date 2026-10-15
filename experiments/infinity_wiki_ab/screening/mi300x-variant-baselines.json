@@ -1,0 +1,201 @@
+{
+  "torch2hip/kernelbench_own/level1/l1n36_RMSNorm_": {
+    "initial_accepted": true,
+    "initial_errors": [],
+    "max_relative_spread": 0.019654841802492905,
+    "median_ms_by_case": {
+      "case_0": 0.1043,
+      "case_1": 0.18768,
+      "case_2": 1.49195,
+      "case_3": 2.67366,
+      "case_4": 3.05631
+    },
+    "rounds": 5,
+    "runtime": {
+      "aiter": null,
+      "flydsl": "0.1.5.dev504",
+      "gpu_arch": "gfx942",
+      "gpu_name": "AMD Instinct MI300X",
+      "hip": "7.2.26015-fc0010cf6a",
+      "python": "3.10.12",
+      "torch": "2.9.1+rocm7.2.0.git7e1940d4",
+      "triton": "3.6.0+git42270451"
+    },
+    "workspace": "/tmp/t2h-1/torch2hip_kernelbench_own_level1_l1n36_RMSNorm__20261015_002627"
+  },
+  "torch2hip/kernelbench_own/level1/l1n4_Matrix_vector_multiplication_": {
+    "initial_accepted": true,
+    "initial_errors": [],
+    "max_relative_spread": 0.009131968075233624,
+    "median_ms_by_case": {
+      "case_0": 0.14798,
+      "case_1": 0.32026,
+      "case_2": 0.80815,
+      "case_3": 0.87539,
+      "case_4": 2.76819
+    },
+    "rounds": 5,
+    "runtime": {
+      "aiter": null,
+      "flydsl": "0.1.5.dev504",
+      "gpu_arch": "gfx942",
+      "gpu_name": "AMD Instinct MI300X",
+      "hip": "7.2.26015-fc0010cf6a",
+      "python": "3.10.12",
+      "torch": "2.9.1+rocm7.2.0.git7e1940d4",
+      "triton": "3.6.0+git42270451"
+    },
+    "workspace": "/tmp/t2h-2/torch2hip_kernelbench_own_level1_l1n4_Matrix_vector_multiplication__20261015_002627"
+  },
+  "torch2hip/kernelbench_own/level1/l1n95_CrossEntropyLoss": {
+    "initial_accepted": true,
+    "initial_errors": [],
+    "max_relative_spread": 0.018733273862622617,
+    "median_ms_by_case": {
+      "case_0": 0.03363,
+      "case_1": 0.08725,
+      "case_2": 0.45276,
+      "case_3": 0.39931,
+      "case_4": 0.44249
+    },
+    "rounds": 5,
+    "runtime": {
+      "aiter": null,
+      "flydsl": "0.1.5.dev504",
+      "gpu_arch": "gfx942",
+      "gpu_name": "AMD Instinct MI300X",
+      "hip": "7.2.26015-fc0010cf6a",
+      "python": "3.10.12",
+      "torch": "2.9.1+rocm7.2.0.git7e1940d4",
+      "triton": "3.6.0+git42270451"
+    },
+    "workspace": "/tmp/t2h-0/torch2hip_kernelbench_own_level1_l1n95_CrossEntropyLoss_20261015_002627"
+  },
+  "triton2triton/geak_eval_open/L3/gemm": {
+    "initial_accepted": true,
+    "initial_errors": [],
+    "max_relative_spread": 0.009891858522883505,
+    "median_ms_by_case": {
+      "case/0": 0.13764543192727224,
+      "case/1": 0.137948853628976,
+      "case/10": 0.34829024970531464,
+      "case/11": 0.6403365135192871,
+      "case/12": 1.3330904841423035,
+      "case/2": 0.1250495740345546,
+      "case/3": 0.12495814050946917,
+      "case/4": 0.1260568584714617,
+      "case/5": 0.12492942810058594,
+      "case/6": 0.12686371803283691,
+      "case/7": 0.12749900136675155,
+      "case/8": 0.13465257201875958,
+      "case/9": 0.1753738045692444
+    },
+    "rounds": 5,
+    "runtime": {
+      "aiter": null,
+      "flydsl": "0.1.5.dev504",
+      "gpu_arch": "gfx942",
+      "gpu_name": "AMD Instinct MI300X",
+      "hip": "7.2.26015-fc0010cf6a",
+      "python": "3.10.12",
+      "torch": "2.9.1+rocm7.2.0.git7e1940d4",
+      "triton": "3.6.0+git42270451"
+    },
+    "workspace": "/tmp/variants-1/triton2triton_geak_eval_open_L3_gemm_20261015_000107"
+  },
+  "triton2triton/rocmbench_open/hard/gemm": {
+    "initial_accepted": true,
+    "initial_errors": [],
+    "max_relative_spread": 0.01626653811259486,
+    "median_ms_by_case": {
+      "test_performance/01b5d784e44cb052dc05": 0.5780816888809204,
+      "test_performance/1a0de70c0ee169b5bb53": 1.8993220913410187,
+      "test_performance/486f9b0432e70921d9f3": 0.762911269068718,
+      "test_performance/5d366416c9573571a224": 1.2582289528846742,
+      "test_performance/64d93ba50c6d6d37f22e": 0.05924522301729988,
+      "test_performance/7e5f96b70d81712ddb63": 0.1254349773270743,
+      "test_performance/9071e1c39fcb9503e5e5": 0.5431182792782784,
+      "test_performance/9fa883e969d23b20fe18": 19.05879362106323,
+      "test_performance/a57fcd93c868b49b60de": 0.24187696039676676,
+      "test_performance/cb531552424c31edf058": 0.5188952794671059,
+      "test_performance/f02589bca1eb53780889": 0.022008981463455025
+    },
+    "rounds": 5,
+    "runtime": {
+      "aiter": null,
+      "flydsl": "0.1.5.dev504",
+      "gpu_arch": "gfx942",
+      "gpu_name": "AMD Instinct MI300X",
+      "hip": "7.2.26015-fc0010cf6a",
+      "python": "3.10.12",
+      "torch": "2.9.1+rocm7.2.0.git7e1940d4",
+      "triton": "3.6.0+git42270451"
+    },
+    "workspace": "/tmp/variants-2/triton2triton_rocmbench_open_hard_gemm_20261015_000107"
+  },
+  "triton2triton/rocmbench_open/hard/test_flashattention_fwd": {
+    "initial_accepted": true,
+    "initial_errors": [],
+    "max_relative_spread": 0.022389859079455995,
+    "median_ms_by_case": {
+      "test_performance/222db14a47f1cf352e99": 0.011437001089527186,
+      "test_performance/619804d0b830b68710c3": 0.028694209959357977,
+      "test_performance/62f036ac2df0d029e1a7": 3.113695261478424,
+      "test_performance/8f6a9ba4f884292240c2": 0.2952953503529231,
+      "test_performance/c44ef6ef8f6b015a7b0c": 0.08529751902276818,
+      "test_performance/d4fbc110dce4b5935db4": 1.024118467569351
+    },
+    "rounds": 5,
+    "runtime": {
+      "aiter": null,
+      "flydsl": "0.1.5.dev504",
+      "gpu_arch": "gfx942",
+      "gpu_name": "AMD Instinct MI300X",
+      "hip": "7.2.26015-fc0010cf6a",
+      "python": "3.10.12",
+      "torch": "2.9.1+rocm7.2.0.git7e1940d4",
+      "triton": "3.6.0+git42270451"
+    },
+    "workspace": "/tmp/variants-0/triton2triton_rocmbench_open_hard_test_flashattention_fwd_20261015_000107"
+  },
+  "triton2triton/rocmbench_open/medium/naive_softmax": {
+    "initial_accepted": true,
+    "initial_errors": [],
+    "max_relative_spread": 0.01078295607177951,
+    "median_ms_by_case": {
+      "test_performance/009ed4f49fb5d7e443a7": 0.473983536362648,
+      "test_performance/20dd9e70649b7a8f3c08": 0.17634653520584107,
+      "test_performance/28c4833b461e1434b828": 0.3287231363852819,
+      "test_performance/4848ac34066c9b399b0c": 0.11638628758490085,
+      "test_performance/5d236cc48b936fc84c49": 0.04069262271342071,
+      "test_performance/7247ba7a3604c0405474": 0.47442423045635224,
+      "test_performance/7b4e2034993beefabd89": 0.11756925173103809,
+      "test_performance/931414f3e220771b117f": 0.041545796472093326,
+      "test_performance/9df6658976a6172d5f15": 0.07203291847155643,
+      "test_performance/a1d5f914465fdedfc2b8": 0.016204015171086356,
+      "test_performance/a3c3738364225182084a": 0.1169022161513567,
+      "test_performance/a4ff393e042eac1a7f52": 0.048625192582607266,
+      "test_performance/aadef7947592f2202b83": 0.07107959834428931,
+      "test_performance/b082ec58237337baaa42": 0.07663052663207054,
+      "test_performance/c92b49a7f78e64c44f5c": 0.016605982867154204,
+      "test_performance/ccc3aff8d852955225d0": 0.17174163997173308,
+      "test_performance/d2ed1f3f20035a4bbe49": 0.24593642622232437,
+      "test_performance/e64066a0495553faf4c4": 0.01753488745175156,
+      "test_performance/f2dc2a47a8cd9275a3fc": 0.47899343460798266,
+      "test_performance/f40aff6221fcc7c210a2": 0.16999318587779993,
+      "test_performance/f856dcce3ad21a722375": 0.24120202973484994
+    },
+    "rounds": 5,
+    "runtime": {
+      "aiter": null,
+      "flydsl": "0.1.5.dev504",
+      "gpu_arch": "gfx942",
+      "gpu_name": "AMD Instinct MI300X",
+      "hip": "7.2.26015-fc0010cf6a",
+      "python": "3.10.12",
+      "torch": "2.9.1+rocm7.2.0.git7e1940d4",
+      "triton": "3.6.0+git42270451"
+    },
+    "workspace": "/tmp/variants-3/triton2triton_rocmbench_open_medium_naive_softmax_20261015_000107"
+  }
+}
