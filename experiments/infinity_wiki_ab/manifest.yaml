@@ -35,8 +35,10 @@ pins:
   # MI300X HBM and Infinity Cache figures (hw-hbm3), strided-axis and cross-workgroup reductions, GEMV and skinny
   # GEMM, attention launch configuration for short sequences, and gfx942 non-temporal code generation, from
   # upstream code, official docs, papers and one benchmark article. General technique pages are the treatment
-  # being measured; a page giving a task's exact solution is not.
-  wiki: {repo: AMD-BRAIN-Internal/infinity-wiki, branch: gfx942-memory-bound-reduction-gemv, commit: 26ea276483d806da75d903724ec25fc925996675, variant: v4-pr1}
+  # being measured; a page giving a task's exact solution is not. main ca5d232 merges that PR (#1) and PR #2,
+  # gfx942 weight-only INT4 GEMM and block-scaled FP8 GEMM pages, for the two vllm_large tasks. The main
+  # invocation started 2026-10-15 04:14 UTC runs on 26ea276 (v4-pr1); later invocations record their own.
+  wiki: {repo: AMD-BRAIN-Internal/infinity-wiki, branch: main, commit: ca5d232ebddb2b6a7eeabb569c5c84b964c6c83c, variant: v5-main-pr2}
   # Opus 5.5, identical in every arm. claude-opus-5-5 answered on 2026-10-15 through Claude Code 2.1.296
   # (setup_node.sh's pin); Claude Code older than 2.1.280 cannot use this model.
   model: claude-opus-5-5
