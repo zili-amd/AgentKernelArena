@@ -200,6 +200,13 @@ invocations:
       - {node: reserved MI300X node C, tasks: triton2triton/vllm_large/triton_awq_gemm}
       - {node: reserved MI300X node D, tasks: triton2triton/vllm_large/triton_w8a8_block_scaled_mm}
     schedule: one task per machine, its 3 repeats of both arms at once on GPUs 0-5, 3 h per run, 90% stop rule.
+    stopped: 2026-10-15 22:14-22:20 UTC by the operator, after 1-3 iterations per run, to analyze the logs.
+    finding: >-
+      Every kf_wiki_guided run left GUIDED for FREE (GUIDED_BUDGET_SPENT) when its second round began, at 41-44%
+      of the budget: the 35% guided share is counted from the loop's start, so ~25 min of baseline and initial
+      analysis and ~20 min of post-KEEP processing spend it on a 3 h run, and GUIDED planned a single round. To
+      fix in Hyperloom before the next guided round: count the guided share from the first planning round and
+      guarantee at least two GUIDED rounds.
   - phase: main
     started: 2026-10-15 04:14 UTC
     aka: a05c6dbb   # with wiki 26ea276, hyperloom 8e24562d / hyperloom_wiki 33f0c340, Opus 5.5
