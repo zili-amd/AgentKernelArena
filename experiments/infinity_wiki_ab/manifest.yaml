@@ -149,6 +149,18 @@ phases:
       torch2hip/kernelbench_own/level1/l1n4_Matrix_vector_multiplication_: 1.909
       triton2triton/vllm_large/triton_awq_gemm: 12.391
       triton2triton/vllm_large/triton_w8a8_block_scaled_mm: 3.320
+  guided:
+    # The guided round's first test: kf (KernelForge without the knowledge base or the guided workflow) vs
+    # kf_wiki_guided on the two vllm_large tasks, one task per machine (start.sh main --phase guided --tasks ...),
+    # its three repeats of both arms at once on six GPUs, 3 h per run, stopping at the main phase's targets.
+    timeout_seconds: 10800
+    repeats: 3
+    tasks:
+      - triton2triton/vllm_large/triton_awq_gemm
+      - triton2triton/vllm_large/triton_w8a8_block_scaled_mm
+    speedup_targets:
+      triton2triton/vllm_large/triton_awq_gemm: 12.391
+      triton2triton/vllm_large/triton_w8a8_block_scaled_mm: 3.320
 
 schedule:
   # This round runs ARMS="kf kf_wiki" (GEAK refuses to run as root in the runtime).

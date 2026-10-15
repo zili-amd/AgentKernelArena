@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Start a phase on a deployed machine, with the LLM gateway credentials from a local env file.
 #   start.sh --host USER@HOST --root DIR --env-file FILE [--key FILE] pilot [--task T] [--repeat N] [--gpu-base B]
-#   start.sh --host USER@HOST --root DIR --env-file FILE [--key FILE] main [--tasks "PREFIX ..."]
+#   start.sh --host USER@HOST --root DIR --env-file FILE [--key FILE] main [--phase NAME] [--tasks "PREFIX ..."]
 # The env file's values travel over ssh stdin only; nothing is printed or put in argv.
 # Pilot defaults: the manifest's pilot task, the next unused repeat, the first free GPU pair.
-# main --tasks keeps the main tasks starting with one of the prefixes, e.g. "triton2triton/".
+# main --tasks keeps the main tasks starting with one of the prefixes, e.g. "triton2triton/"; main --phase runs
+# another manifest phase the same way (its tasks, repeats, budget and targets), logging to logs/<phase>.log.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOST="" ROOT="" KEY="" ENV_FILE="" PHASE="" TASK="" REPEAT="" GPU_BASE="" TASKS_PREFIX=""
+HOST="" ROOT="" KEY="" ENV_FILE="" PHASE="" TASK="" REPEAT="" GPU_BASE="" TASKS_PREFIX="" RUN_PHASE="main"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --host) HOST="$2"; shift 2 ;;
@@ -19,6 +20,7 @@ while [[ $# -gt 0 ]]; do
         --repeat) REPEAT="$2"; shift 2 ;;
         --gpu-base) GPU_BASE="$2"; shift 2 ;;
         --tasks) TASKS_PREFIX="$2"; shift 2 ;;
+        --phase) RUN_PHASE="$2"; shift 2 ;;
         pilot|main) PHASE="$1"; shift ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
@@ -57,8 +59,11 @@ EOF
     echo "pilot: $TASK repeat $REPEAT on GPUs $GPU_BASE-$((GPU_BASE + 1))"
 else
     [[ "$TASKS_PREFIX" =~ ^[A-Za-z0-9_./\ -]*$ ]] || { echo "ERROR: --tasks takes task path prefixes" >&2; exit 2; }
-    command="TASKS_PREFIX=\"$TASKS_PREFIX\" setsid nohup bash $ROOT/dist/experiment/run_main.sh $ROOT > $ROOT/logs/main.log 2>&1 < /dev/null &"
-    echo "main: ${TASKS_PREFIX:-every main task}; log $ROOT/logs/main.log"
+    [[ "$RUN_PHASE" =~ ^[a-z][a-z0-9_]*$ ]] || { echo "ERROR: --phase takes a manifest phase name" >&2; exit 2; }
+    python3 -c "import sys, yaml; p = yaml.safe_load(open(sys.argv[1]))['phases'].get(sys.argv[2]); sys.exit(not (p and p.get('tasks')))" \
+        "$HERE/manifest.yaml" "$RUN_PHASE" || { echo "ERROR: manifest phase $RUN_PHASE has no tasks" >&2; exit 2; }
+    command="PHASE=\"$RUN_PHASE\" TASKS_PREFIX=\"$TASKS_PREFIX\" setsid nohup bash $ROOT/dist/experiment/run_main.sh $ROOT > $ROOT/logs/$RUN_PHASE.log 2>&1 < /dev/null &"
+    echo "$RUN_PHASE: ${TASKS_PREFIX:-every $RUN_PHASE task}; log $ROOT/logs/$RUN_PHASE.log"
 fi
 
 { printf 'set -a\n'; cat "$ENV_FILE"; printf '\nset +a\nmkdir -p %s/logs\n' "$ROOT"; printf '%s\n' "$command"; echo "sleep 15; tail -n 3 $ROOT/invocations.jsonl"; } \
