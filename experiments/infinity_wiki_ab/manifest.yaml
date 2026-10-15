@@ -20,10 +20,12 @@ pins:
   # change: the implementer states a decision-focused rationale and it is logged on every iteration_result
   # (forge-reasoning-main and forge-knowledge-wiki-reasoning-main both carry it). The kf arm gets `hyperloom`
   # (main 1a444f6b8 + reasoning, no knowledge base), kf_wiki gets `hyperloom_wiki` (the same reasoning plus the
-  # read-only knowledge base tools for every forge role and the declared test_*.py target escape, with each
-  # wiki call now carrying a required logged reason). Both also keep each fan-out lane's own rationale for the
-  # iteration that measures it; the 12 h long job on 816718bc0 / 1d51fd5b8 logged only "lane N of a fan-out round".
-  hyperloom: {repo: AMD-AGI/Hyperloom, branch: forge-reasoning-main, commit: d35b106e361227520d158cf0ddb66d61fb7c3024}
+  # read-only knowledge base tools for every forge role, with each wiki call now carrying a required logged
+  # reason). Both also keep each fan-out lane's own rationale for the iteration that measures it (the 12 h long
+  # job on 816718bc0 / 1d51fd5b8 logged only "lane N of a fan-out round"), and both let a declared test_*.py
+  # target escape the test-name protection (c4a848920): without it every edit to the attention task's
+  # test_flashattention_fwd.py is denied.
+  hyperloom: {repo: AMD-AGI/Hyperloom, branch: forge-reasoning-main, commit: 04cc1a9c9d59de04007a98783c0a9e9b60c5e621}
   hyperloom_wiki: {repo: AMD-AGI/Hyperloom, branch: forge-knowledge-wiki-reasoning-main, commit: 55d81457ab6d53f8833e24d34ac0eaa9bea9b6b1}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
   # Test with main. main 0523818 merges the gfx942-technique-context branch (row reductions, HIP MFMA GEMM
