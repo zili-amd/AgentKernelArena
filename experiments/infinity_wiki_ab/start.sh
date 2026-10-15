@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Start a phase on a deployed machine, with the LLM gateway credentials from a local env file.
 #   start.sh --host USER@HOST --root DIR --env-file FILE [--key FILE] pilot [--task T] [--repeat N] [--gpu-base B]
-#   start.sh --host USER@HOST --root DIR --env-file FILE [--key FILE] main
+#   start.sh --host USER@HOST --root DIR --env-file FILE [--key FILE] main [--tasks "PREFIX ..."]
 # The env file's values travel over ssh stdin only; nothing is printed or put in argv.
 # Pilot defaults: the manifest's pilot task, the next unused repeat, the first free GPU pair.
+# main --tasks keeps the main tasks starting with one of the prefixes, e.g. "triton2triton/".
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOST="" ROOT="" KEY="" ENV_FILE="" PHASE="" TASK="" REPEAT="" GPU_BASE=""
+HOST="" ROOT="" KEY="" ENV_FILE="" PHASE="" TASK="" REPEAT="" GPU_BASE="" TASKS_PREFIX=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --host) HOST="$2"; shift 2 ;;
@@ -17,6 +18,7 @@ while [[ $# -gt 0 ]]; do
         --task) TASK="$2"; shift 2 ;;
         --repeat) REPEAT="$2"; shift 2 ;;
         --gpu-base) GPU_BASE="$2"; shift 2 ;;
+        --tasks) TASKS_PREFIX="$2"; shift 2 ;;
         pilot|main) PHASE="$1"; shift ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
@@ -54,8 +56,9 @@ EOF
     command="ARMS=\"\$(tr '\n' ' ' < $ROOT/dist/arms.txt)\" setsid nohup bash $ROOT/dist/experiment/launch_wave.sh $ROOT pilot $TASK $REPEAT $GPU_BASE > $ROOT/logs/pilot-$slug-r$REPEAT.launch.log 2>&1 < /dev/null &"
     echo "pilot: $TASK repeat $REPEAT on GPUs $GPU_BASE-$((GPU_BASE + 1))"
 else
-    command="setsid nohup bash $ROOT/dist/experiment/run_main.sh $ROOT > $ROOT/logs/main.log 2>&1 < /dev/null &"
-    echo "main: every main task as a pair per wave; log $ROOT/logs/main.log"
+    [[ "$TASKS_PREFIX" =~ ^[A-Za-z0-9_./\ -]*$ ]] || { echo "ERROR: --tasks takes task path prefixes" >&2; exit 2; }
+    command="TASKS_PREFIX=\"$TASKS_PREFIX\" setsid nohup bash $ROOT/dist/experiment/run_main.sh $ROOT > $ROOT/logs/main.log 2>&1 < /dev/null &"
+    echo "main: ${TASKS_PREFIX:-every main task}; log $ROOT/logs/main.log"
 fi
 
 { printf 'set -a\n'; cat "$ENV_FILE"; printf '\nset +a\nmkdir -p %s/logs\n' "$ROOT"; printf '%s\n' "$command"; echo "sleep 15; tail -n 3 $ROOT/invocations.jsonl"; } \
