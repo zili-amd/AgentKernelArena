@@ -177,6 +177,15 @@ invocations:
       by-task waves: one task at a time per machine, its 3 repeats of kf and kf_wiki at once on GPUs 0-5,
       12 h per run (the 90% stop rule can end a run earlier); the next task starts after all six runs end.
       The hip2hip main tasks are not part of this invocation.
+  - phase: main
+    started: 2026-10-15 05:31 UTC
+    aka: 4b68cc68   # with wiki ca5d232, hyperloom 8e24562d / hyperloom_wiki 33f0c340, Opus 5.5
+    machines:
+      - {node: reserved MI300X node C, tasks: triton2triton/vllm_large/triton_awq_gemm}
+      - {node: reserved MI300X node D, tasks: triton2triton/vllm_large/triton_w8a8_block_scaled_mm}
+    schedule: >-
+      one wave per machine: its task's 3 repeats of kf and kf_wiki at once on GPUs 0-5, 12 h per run (the 90%
+      stop rule can end a run earlier). These two tasks run on wiki ca5d232, which has pages for them.
 exclusions:
   - runs: pilot hip2hip/gpumode_large/SimpleMatmulModule r0-r2, kf and kf_wiki (started 2026-10-13 20:55 UTC)
     stopped: 2026-10-13 21:45 UTC, before any KEEP
