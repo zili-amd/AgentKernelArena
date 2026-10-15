@@ -193,3 +193,10 @@ exclusions:
       The task did not forbid library delegation, and one kf analysis proposed handing the GEMM
       to hipBLASLt. The README now requires candidate-owned kernels and the harness guard refuses
       added BLAS/MIOpen/ATen operator calls; all six runs restart from scratch.
+  - runs: main torch2hip/kernelbench_own/level1/l1n36_RMSNorm_ r1 kf (started 2026-10-15 15:58 UTC, GPU 2)
+    stopped: 2026-10-15 16:05 UTC, before the first agent call
+    reason: >-
+      Forge's startup probe of claude-opus-5-5 through the gateway timed out (ClaudeUnavailableError), so
+      the engine exited, the agent never ran and AKA scored the untouched candidate 0. Rerun with the same
+      repeat on GPU 2 from 2026-10-15 18:34 UTC; the failed run's log and home are kept with the suffix
+      .excluded-probe-timeout.
