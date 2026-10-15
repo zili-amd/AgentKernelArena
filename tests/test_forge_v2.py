@@ -449,7 +449,7 @@ def test_action_budget_is_capped_by_remaining_campaign(tmp_path):
 
 
 def mock_engine(monkeypatch, *, fail=False, port_ok=True, timeout=False, applyback_optional=False,
-                knowledge_wiki_tool=True, speedup_target=True):
+                knowledge_wiki_tool=True, speedup_target=True, wiki_guided=True):
     commands = []
     real_run = subprocess.run
     def subprocess_run(command, **kwargs):
@@ -457,7 +457,8 @@ def mock_engine(monkeypatch, *, fail=False, port_ok=True, timeout=False, applyba
             return SimpleNamespace(returncode=0, stdout=json.dumps(
                 {"backends": ["flydsl", "hip", "triton"], "adapter_api": 1,
                  "applyback_optional": applyback_optional,
-                 "knowledge_wiki_tool": knowledge_wiki_tool, "speedup_target": speedup_target}), stderr="")
+                 "knowledge_wiki_tool": knowledge_wiki_tool, "speedup_target": speedup_target,
+                 "wiki_guided": wiki_guided}), stderr="")
         return real_run(command, **kwargs)
     monkeypatch.setattr(adapter.subprocess, "run", subprocess_run)
     monkeypatch.setattr(adapter, "_resolve_gpu_arch", lambda _: "gfx950")
@@ -1176,6 +1177,48 @@ def test_forge_serves_the_knowledge_wiki_to_its_agents_as_engine_tools(tmp_path,
     program = (status.parent / "engine" / "arena_program.md").read_text()
     assert program.endswith(knowledge_wiki.TOOL_INSTRUCTIONS)
     assert "knowledge_wiki.py" not in program
+
+
+GUIDED = {"agent": {"wiki_guided": True}, "knowledge_wiki": {"enabled": True}}
+
+
+def test_a_guided_run_asks_forge_loop_to_plan_from_the_playbook(tmp_path, monkeypatch):
+    _knowledge_wiki_root(tmp_path, monkeypatch)
+    command = _launched_command(tmp_path, monkeypatch, GUIDED)
+    assert "forge-loop" in command and "--wiki-guided" in command
+    assert command[command.index("--guided-budget-fraction") + 1] == "0.35"
+
+
+def test_a_guided_run_passes_its_own_budget_share(tmp_path, monkeypatch):
+    _knowledge_wiki_root(tmp_path, monkeypatch)
+    config = {**GUIDED, "agent": {"wiki_guided": True, "guided_budget_fraction": 0.5}}
+    command = _launched_command(tmp_path, monkeypatch, config)
+    assert command[command.index("--guided-budget-fraction") + 1] == "0.5"
+
+
+def test_a_knowledge_wiki_run_without_the_flag_plans_as_before(tmp_path, monkeypatch):
+    _knowledge_wiki_root(tmp_path, monkeypatch)
+    command = _launched_command(tmp_path, monkeypatch, {"knowledge_wiki": {"enabled": True}})
+    assert "--wiki-guided" not in command and "--guided-budget-fraction" not in command
+
+
+def test_a_guided_run_needs_the_knowledge_base(tmp_path, monkeypatch):
+    with pytest.raises(adapter.ForgeRunError, match="needs knowledge_wiki enabled"):
+        _launched_command(tmp_path, monkeypatch, {"agent": {"wiki_guided": True}})
+
+
+def test_a_guided_run_refuses_an_engine_that_would_plan_without_the_playbook(tmp_path, monkeypatch):
+    _knowledge_wiki_root(tmp_path, monkeypatch)
+    with pytest.raises(adapter.ForgeRunError, match="no --wiki-guided"):
+        _launched_command(tmp_path, monkeypatch, GUIDED, wiki_guided=False)
+
+
+@pytest.mark.parametrize(("key", "value"), [("wiki_guided", "yes"), ("wiki_guided", 1),
+                                            ("guided_budget_fraction", 0), ("guided_budget_fraction", 1.5),
+                                            ("guided_budget_fraction", "0.35")])
+def test_guided_settings_are_validated(key, value):
+    with pytest.raises(ValueError, match=key):
+        adapter._config({"agent": {key: value}})
 
 
 def test_a_knowledge_wiki_run_refuses_an_engine_without_the_tool(tmp_path, monkeypatch):

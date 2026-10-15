@@ -61,7 +61,7 @@ def _config(eval_config: dict) -> dict:
     allowed = {"workflow", "model", "timeout_seconds", "permission_mode", "agent_backend",
                "python", "max_port_attempts", "supervisor_backend", "session_timeout_seconds",
                "initialization_max_attempts", "initialization_budget_fraction", "experience_kb",
-               "target_mean_case_speedup"}
+               "target_mean_case_speedup", "wiki_guided", "guided_budget_fraction"}
     config.update({key: value for key, value in overrides.items() if key in allowed})
     if overrides.get("agent_backend") not in (None, "claude") and "model" not in overrides:
         # A Claude default is not a model ID for another provider. Let upstream
@@ -82,6 +82,11 @@ def _config(eval_config: dict) -> dict:
     # The baseline's mean case speedup is 1, so a target at or below it would end the loop before its first round.
     if type(target) not in (int, float) or not math.isfinite(target) or (target != 0 and target <= 1):
         raise ValueError("Forge target_mean_case_speedup must be 0 (off) or a speedup above 1")
+    if type(config["wiki_guided"]) is not bool:
+        raise ValueError("Forge wiki_guided must be true or false")
+    share = config["guided_budget_fraction"]
+    if type(share) not in (int, float) or not 0 < share <= 1:
+        raise ValueError("Forge guided_budget_fraction must be in (0, 1]")
     return config
 
 
@@ -297,8 +302,12 @@ def build_command(plan: dict, context: TaskContext, config: dict, *, gpu_arch: s
                     "--no-prepare-task"]
         if config.get("target_mean_case_speedup"):
             command += ["--target-mean-case-speedup", str(config["target_mean_case_speedup"])]
+        if config.get("wiki_guided"):
+            command += ["--wiki-guided", "--guided-budget-fraction", str(config["guided_budget_fraction"])]
     elif config.get("target_mean_case_speedup"):
         raise ValueError("target_mean_case_speedup applies to forge-loop, not to the FlyDSL rewrite")
+    elif config.get("wiki_guided"):
+        raise ValueError("wiki_guided applies to forge-loop, not to the FlyDSL rewrite")
     else:
         command += ["--source-kernel", plan["source"], "--flydsl-kernel-name", plan["anchor"],
                     "--logical-op-name", operator, "--no-prepare-driver",
@@ -386,6 +395,11 @@ def launch(eval_config: dict, task_config_dir: str, workspace: str) -> str:
         if config.get("target_mean_case_speedup") and not capabilities.get("speedup_target"):
             raise ForgeRunError("target_mean_case_speedup is set, but the installed KernelForge forge-loop has "
                                 "no --target-mean-case-speedup and would run to its time budget")
+        if config.get("wiki_guided") and wiki is None:
+            raise ForgeRunError("wiki_guided needs knowledge_wiki enabled for the run: a playbook is built from it")
+        if config.get("wiki_guided") and not capabilities.get("wiki_guided"):
+            raise ForgeRunError("wiki_guided is set, but the installed KernelForge forge-loop has no --wiki-guided "
+                                "and would plan without the playbook")
         plan["applyback_optional"] = bool(capabilities.get("applyback_optional"))
         require_supported_backend(context.spec, capabilities)
         candidate = context.spec.candidate

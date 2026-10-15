@@ -31,6 +31,13 @@ def run_config(manifest: dict, phase: dict, task: str, arm: str) -> dict:
             if task not in targets:
                 raise ValueError(f"the phase sets speedup targets but none for {task}")
             agent["target_mean_case_speedup"] = targets[task]
+    if spec.get("wiki_guided"):
+        # The playbook is built from the knowledge base, so a guided arm without one would plan unguided.
+        if spec["template"] != "forge" or not spec["knowledge_wiki"]:
+            raise ValueError(f"arm {arm}: wiki_guided needs the forge template and a knowledge_wiki pin")
+        agent["wiki_guided"] = True
+        if "guided_budget_fraction" in spec:
+            agent["guided_budget_fraction"] = spec["guided_budget_fraction"]
     config = {"agent": agent, "tasks": [task], "target_gpu_model": "MI300",
               "log_directory": "logs", "workspace_directory_prefix": "workspace"}
     if spec["knowledge_wiki"]:

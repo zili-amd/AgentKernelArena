@@ -60,11 +60,13 @@ def probe() -> dict:
     # An engine without it would run past a speedup target to its time budget.
     loop_parameters = {parameter.name for parameter in cli.main.commands["forge-loop"].params}
     speedup_target = "target_mean_case_speedup" in loop_parameters
+    # An engine without it would run a guided arm with the knowledge base as context only.
+    wiki_guided = "wiki_guided" in loop_parameters
     return {"adapter_api": ADAPTER_API, "version": version,
             "initialization_targets": ["flydsl", "hip", "triton"],
             "backends": sorted(KERNEL_BACKENDS), "rewrite_target": "flydsl",
             "applyback_optional": applyback_optional, "knowledge_wiki_tool": knowledge_wiki_tool,
-            "speedup_target": speedup_target}
+            "speedup_target": speedup_target, "wiki_guided": wiki_guided}
 
 
 def main(argv=None):
