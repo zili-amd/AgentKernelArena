@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Run the main phase in waves, every (task, repeat) with all of dist/arms.txt, waiting for each wave.
-#   [TASKS_PREFIX="triton2triton/ ..."] run_main.sh ROOT [--dry-run]
+# Run the main phase (or PHASE, another manifest phase with tasks and repeats) in waves, every (task, repeat)
+# with all of dist/arms.txt, waiting for each wave.
+#   [PHASE=main] [TASKS_PREFIX="triton2triton/ ..."] run_main.sh ROOT [--dry-run]
 # schedule.waves in the manifest picks the wave shape:
 #   by-repeat  each wave is one repeat of as many tasks as there are GPU bases; task j uses GPU_BASES[j].
 #   by-task    each wave is one task with all its repeats at once, on the first free GPU bases;
@@ -21,8 +22,10 @@ ARMS="$(tr '\n' ' ' < "$ROOT/dist/arms.txt")"
 export ARMS
 read -r -a ARM_LIST <<< "$ARMS"
 
-mapfile -t ALL_TASKS < <(python3 -c "import sys, yaml; print('\n'.join(yaml.safe_load(open(sys.argv[1]))['phases']['main']['tasks']))" "$MANIFEST")
-REPEATS="$(python3 -c "import sys, yaml; print(yaml.safe_load(open(sys.argv[1]))['phases']['main']['repeats'])" "$MANIFEST")"
+PHASE="${PHASE:-main}"
+[[ "$PHASE" =~ ^[a-z][a-z0-9_]*$ ]] || { echo "ERROR: PHASE must name a manifest phase" >&2; exit 2; }
+mapfile -t ALL_TASKS < <(python3 -c "import sys, yaml; print('\n'.join(yaml.safe_load(open(sys.argv[1]))['phases'][sys.argv[2]]['tasks']))" "$MANIFEST" "$PHASE")
+REPEATS="$(python3 -c "import sys, yaml; print(yaml.safe_load(open(sys.argv[1]))['phases'][sys.argv[2]]['repeats'])" "$MANIFEST" "$PHASE")"
 WAVES="$(python3 -c "import sys, yaml; print(yaml.safe_load(open(sys.argv[1]))['schedule'].get('waves', 'by-repeat'))" "$MANIFEST")"
 read -r -a GPU_BASES <<< "$(python3 -c "import sys, yaml; print(*yaml.safe_load(open(sys.argv[1]))['schedule']['gpu_bases'])" "$MANIFEST")"
 for (( b = 1; b < ${#GPU_BASES[@]}; b++ )); do
@@ -38,7 +41,7 @@ for (( j = 0; j < ${#ALL_TASKS[@]}; j++ )); do
     for prefix in "${PREFIXES[@]}"; do [[ "${ALL_TASKS[$j]}" == "$prefix"* ]] && keep=1; done
     (( keep )) && { TASKS+=("${ALL_TASKS[$j]}"); TASK_INDEX+=("$j"); }
 done
-(( ${#TASKS[@]} )) || { echo "ERROR: no main task matches TASKS_PREFIX=${TASKS_PREFIX:-}" >&2; exit 1; }
+(( ${#TASKS[@]} )) || { echo "ERROR: no $PHASE task matches TASKS_PREFIX=${TASKS_PREFIX:-}" >&2; exit 1; }
 [[ "$WAVES" == by-repeat || "$WAVES" == by-task ]] || { echo "ERROR: schedule.waves must be by-repeat or by-task" >&2; exit 1; }
 [[ "$WAVES" == by-repeat ]] || (( REPEATS <= ${#GPU_BASES[@]} )) \
     || { echo "ERROR: $REPEATS repeats need as many GPU bases; the manifest has ${#GPU_BASES[@]}" >&2; exit 1; }
@@ -46,7 +49,7 @@ done
 group() {  # repeat task base task-index
     local attempt
     for (( attempt = 1; attempt <= RETRIES; attempt++ )); do
-        if ROTATE="$4" bash "$HERE/launch_wave.sh" "$ROOT" main "$2" "$1" "$3" $DRY_RUN; then
+        if ROTATE="$4" bash "$HERE/launch_wave.sh" "$ROOT" "$PHASE" "$2" "$1" "$3" $DRY_RUN; then
             return 0
         fi
         echo "$(date -u +%FT%TZ) r$1 $2: launch refused (attempt $attempt/$RETRIES); retrying in ${RETRY_S}s"
@@ -67,7 +70,7 @@ free_bases() {  # GPU bases whose GPUs no process uses, in manifest order
     return 0
 }
 
-echo "$(date -u +%FT%TZ) main: $WAVES waves of ${TASKS[*]}; $REPEATS repeats; arms $ARMS"
+echo "$(date -u +%FT%TZ) $PHASE: $WAVES waves of ${TASKS[*]}; $REPEATS repeats; arms $ARMS"
 if [[ "$WAVES" == by-task ]]; then
     for (( t = 0; t < ${#TASKS[@]}; t++ )); do
         task="${TASKS[$t]}" bases=()
@@ -105,4 +108,4 @@ else
         done
     done
 fi
-[[ -n "$DRY_RUN" ]] || python3 "$HERE/make_record.py" "$ROOT" --phase main
+[[ -n "$DRY_RUN" ]] || python3 "$HERE/make_record.py" "$ROOT" --phase "$PHASE"
