@@ -192,6 +192,14 @@ preregistration:
   exclusion_rule: a run that fails audit_run.py (exit 1) is excluded and rerun with the same GPU slot.
 
 invocations:
+  - phase: guided
+    started: 2026-10-15 20:41 UTC
+    aka: 56feb031   # with wiki ca5d232, hyperloom 8e24562d (kf) / hyperloom_wiki_guided ccf5f599 (kf_wiki_guided), Opus 5.5
+    arms: kf kf_wiki_guided
+    machines:
+      - {node: reserved MI300X node C, tasks: triton2triton/vllm_large/triton_awq_gemm}
+      - {node: reserved MI300X node D, tasks: triton2triton/vllm_large/triton_w8a8_block_scaled_mm}
+    schedule: one task per machine, its 3 repeats of both arms at once on GPUs 0-5, 3 h per run, 90% stop rule.
   - phase: main
     started: 2026-10-15 04:14 UTC
     aka: a05c6dbb   # with wiki 26ea276, hyperloom 8e24562d / hyperloom_wiki 33f0c340, Opus 5.5
