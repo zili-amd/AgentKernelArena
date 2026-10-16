@@ -363,6 +363,14 @@ invocations:
       one wave per machine: its task's 3 repeats of kf and kf_wiki at once on GPUs 0-5, 12 h per run (the 90%
       stop rule can end a run earlier). These two tasks run on wiki ca5d232, which has pages for them.
 exclusions:
+  - runs: mi300_aiter Aiter-task-mi300/gemm_a16w16_nt_n128_k6144 r1 kf (GPU 2), r1 kf_wiki_guided (GPU 3), r2 kf (GPU 5), started 2026-10-16 14:14 UTC
+    stopped: 2026-10-16 14:19 UTC, before the first agent call
+    reason: >-
+      Forge's startup probe of claude-opus-5-5 through the gateway timed out (ClaudeUnavailableError) in all three,
+      so the engine exited and AKA scored the untouched seed (0.22-0.23). The task's other three runs, started at
+      the same moment, passed the probe. Their logs and agent homes are kept on node E with a probe-failed- prefix.
+      Reruns: the r1 pair on GPUs 6/7 from 2026-10-16 18:18 UTC, then r2 kf alone on GPU 6 once that pair ends; the
+      phase's last task keeps GPUs 0-5.
   - runs: pilot hip2hip/gpumode_large/SimpleMatmulModule r0-r2, kf and kf_wiki (started 2026-10-13 20:55 UTC)
     stopped: 2026-10-13 21:45 UTC, before any KEEP
     reason: >-
