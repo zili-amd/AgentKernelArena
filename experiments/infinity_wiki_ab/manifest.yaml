@@ -314,6 +314,17 @@ preregistration:
   exclusion_rule: a run that fails audit_run.py (exit 1) is excluded and rerun with the same GPU slot.
 
 invocations:
+  - phase: guided3h_triton_hip
+    started: 2026-10-16 23:37 UTC
+    aka: 2fac3a37   # with wiki ca5d232, hyperloom_wiki_guided 183a6374 (kf_wiki_guided), Opus 5.5
+    arms: kf_wiki_guided
+    machines:
+      - {node: shared MI300X dev node A, tasks: "triton_awq_gemm, test_flashattention_fwd, rocmbench_open/hard/gemm, SoftmaxModule"}
+      - {node: shared MI300X dev node B, tasks: "triton_w8a8_block_scaled_mm, geak_eval_open/L3/gemm, naive_softmax, SimpleMatmulModule"}
+    schedule: >-
+      by-slot: each (task, repeat) on its own GPU as soon as one is free, repeats 0 and 1 of all four tasks first on
+      GPUs 0-7, repeat 2 as GPUs free; 3 h per run, the main phase's stop targets.
+    note: Read for the first iteration against guided_6h and guided_triton; no kf arm in this invocation.
   - phase: mi300_aiter
     started: 2026-10-16 08:29 UTC
     aka: fc33b805   # with wiki ca5d232, hyperloom 8e24562d (kf) / hyperloom_wiki_guided a9abecb2 (kf_wiki_guided), Opus 5.5
