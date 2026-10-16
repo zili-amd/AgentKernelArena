@@ -306,6 +306,12 @@ invocations:
       by-task waves: one task at a time per machine, its 3 repeats of kf and kf_wiki at once on GPUs 0-5,
       12 h per run (the 90% stop rule can end a run earlier); the next task starts after all six runs end.
       The hip2hip main tasks are not part of this invocation.
+    ended: >-
+      Node A rebooted at 2026-10-15 21:54 UTC, about 5 h into triton2triton/geak_eval_open/L3/gemm; its six
+      runs died without end events or results and no later Triton task started. On node B the user stopped
+      the invocation at 2026-10-16 06:21 UTC, about 2.3 h into torch2hip/kernelbench_own/level1/
+      l1n4_Matrix_vector_multiplication_; its six runs were killed without end events or results. Complete:
+      test_flashattention_fwd, l1n95_CrossEntropyLoss and l1n36_RMSNorm_ (3 pairs each).
   - phase: main
     started: 2026-10-15 05:31 UTC
     aka: 4b68cc68   # with wiki ca5d232, hyperloom 8e24562d / hyperloom_wiki 33f0c340, Opus 5.5
