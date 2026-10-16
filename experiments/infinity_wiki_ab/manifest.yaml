@@ -204,6 +204,17 @@ preregistration:
 
 invocations:
   - phase: guided
+    started: 2026-10-16 01:47 UTC
+    aka: efaf3256   # with wiki ca5d232, hyperloom 8e24562d (kf) / hyperloom_wiki_guided c1b62e6b (kf_wiki_guided), Opus 5.5
+    arms: kf kf_wiki_guided
+    machines:
+      - {node: reserved MI300X node C, tasks: triton2triton/vllm_large/triton_awq_gemm}
+      - {node: reserved MI300X node D, tasks: triton2triton/vllm_large/triton_w8a8_block_scaled_mm}
+    schedule: one task per machine, its 3 repeats of both arms at once on GPUs 0-5, 3 h per run, 90% stop rule.
+    note: >-
+      The first invocation of GUIDED batches. Reuses the run suffixes of the two stopped invocations, whose
+      artifacts carry stopped-v1- and stopped-v2- prefixes on both nodes.
+  - phase: guided
     started: 2026-10-15 23:14 UTC
     aka: 714b329b   # with wiki ca5d232, hyperloom 8e24562d (kf) / hyperloom_wiki_guided 5363a8ad (kf_wiki_guided), Opus 5.5
     arms: kf kf_wiki_guided
