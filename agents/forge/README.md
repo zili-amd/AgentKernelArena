@@ -375,16 +375,17 @@ override `workflow`, `model`, `agent_backend`, `permission_mode`,
 `timeout_seconds`, `session_timeout_seconds`, `max_port_attempts`,
 `initialization_max_attempts`, `initialization_budget_fraction`,
 `supervisor_backend`, `experience_kb`, `target_mean_case_speedup`,
-`wiki_guided`, `guided_budget_fraction`, and `python`.
+`wiki_guided`, and `python`.
 An empty supervisor follows the selected backend. A nonzero
 `target_mean_case_speedup` (above 1) is passed as forge-loop
 `--target-mean-case-speedup`, which ends the loop once the incumbent's mean
 per-case speedup reaches it; the run refuses an engine whose forge-loop lacks
 the option, and a FlyDSL rewrite, which has no such stop. `wiki_guided: true`
-passes `--wiki-guided --guided-budget-fraction <guided_budget_fraction>`
-(default 0.35): the loop first plans from a playbook it builds from the
-knowledge base, then freely once the playbook is spent, the search stalls or
-that share of the budget is used. It needs `knowledge_wiki` enabled for the run,
+passes `--wiki-guided`: every round first builds a batch of the directions the
+knowledge base and the round's evidence support, implements it in one session
+and measures it once, and the loop plans freely once the knowledge base and
+the evidence support no further direction or a batch brings no gain. It needs
+`knowledge_wiki` enabled for the run,
 and the run refuses an engine whose forge-loop lacks the option and a FlyDSL
 rewrite. Lane count, task preparation, profiling and planning probes
 follow the engine defaults. Arena publishes the task and leaves the search policy

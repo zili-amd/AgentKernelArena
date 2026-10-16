@@ -17,11 +17,10 @@ supervisor_backend: ""
 # End the optimization loop once the incumbent's mean per-case speedup reaches
 # this value (forge-loop --target-mean-case-speedup); 0 runs to the time budget.
 target_mean_case_speedup: 0
-# Plan from a knowledge base playbook first (forge-loop --wiki-guided): GUIDED
-# until the playbook is spent, the search stalls or guided_budget_fraction of
-# the time budget is used, then FREE. Needs knowledge_wiki enabled for the run.
+# Plan each round as one knowledge base batch first (forge-loop --wiki-guided):
+# GUIDED until the knowledge base and the evidence support no further direction
+# or a batch brings no gain, then FREE. Needs knowledge_wiki enabled for the run.
 wiki_guided: false
-guided_budget_fraction: 0.35
 # isolated: each invocation reads and publishes only a fresh, empty Experience
 # KB in its own artifact directory, so no run warm-starts from another run's
 # solutions. engine: the engine's own store and warm-start defaults.

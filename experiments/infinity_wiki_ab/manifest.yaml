@@ -39,8 +39,13 @@ pins:
   # GUIDED rounds. c1b62e6b, after the second guided invocation: a GUIDED round is a batch -- every open group the
   # round's evidence supports, one step per group run one after another on the canonical tree, each measured and
   # kept on its own, with no re-analysis or planning until the last step -- instead of concurrent lanes measured one
-  # per iteration with a full re-analysis after every KEEP. Without --wiki-guided it plans as hyperloom_wiki.
-  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: forge-wiki-guided, commit: c1b62e6b58bb8c11b1b4048536c74ad7eae41336}
+  # per iteration with a full re-analysis after every KEEP. a9abecb2, after the third guided invocation: the whole
+  # batch is one iteration -- every GUIDED round asks the builder for that round's batch from the knowledge base and
+  # its own profile (showing it what earlier batches settled), plans one part per group, and one Implementer session
+  # implements every part, reverting in-session a part that breaks or slows the kernel, measured once -- and GUIDED
+  # ends when the builder finds no further direction or a batch brings no gain; the ranker, the step queue and the
+  # 35% share are gone. Without --wiki-guided it plans as hyperloom_wiki.
+  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: forge-wiki-guided, commit: a9abecb29f33128556a0235d970bc3fd5d1ea545}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
   # Test with infinity-wiki PR #1 (branch gfx942-memory-bound-reduction-gemv), one commit on main cdcda80.
   # Over the previous pin 0523818: main cdcda80 adds Hyperloom's knowledge cards (sources/community-kb) and the
