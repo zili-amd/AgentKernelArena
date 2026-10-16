@@ -215,6 +215,15 @@ invocations:
       Reuses the stopped invocation's run suffixes, so its run directories, agent homes, logs, record and ledger
       were renamed in place with a stopped-v1- prefix on both nodes before this launch; nothing of it is read
       by this invocation's record.
+    stopped: >-
+      2026-10-16 01:35 UTC by the operator, about 141 of 180 minutes in, to test GUIDED batches
+      (c1b62e6b); its artifacts were renamed in place with a stopped-v2- prefix. Bests at the stop -- AWQ kf
+      7.351 / 8.993 / 6.469, kf_wiki_guided 7.397 / 6.996 / 10.150; FP8 kf 1.978 / 1.934 / 1.967, kf_wiki_guided
+      1.953 / 1.901 / 1.921.
+    finding: >-
+      Of 22 playbook groups measured across the six kf_wiki_guided runs, 20 were kept and 2 measured neutral; none
+      regressed. Each kept group was still followed by a 12-25 minute re-analysis and often a port session before
+      the next group was measured, which is what the batch change removes.
   - phase: guided
     started: 2026-10-15 23:36 UTC
     aka: e2c85ba5   # with wiki ca5d232, hyperloom 8e24562d (kf) / hyperloom_wiki_guided 5363a8ad (kf_wiki_guided), Opus 5.5
