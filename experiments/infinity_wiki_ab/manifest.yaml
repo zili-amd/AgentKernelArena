@@ -193,6 +193,23 @@ phases:
       triton2triton/rocmbench_open/hard/gemm: 2.463
       triton2triton/geak_eval_open/L3/gemm: 15.531
       triton2triton/rocmbench_open/medium/naive_softmax: 19.019
+  guided_6h:
+    # kf vs kf_wiki_guided at 6 h per run on the two vllm_large tasks and the two hip2hip main tasks, two tasks
+    # per machine (start.sh main --phase guided_6h --tasks "<vllm_large task> <hip2hip task>"): by-task waves,
+    # each task's three repeats of both arms at once on six GPUs, stopping at the main phase's targets. Its own
+    # phase, so its run suffixes do not reuse the guided phase's.
+    timeout_seconds: 21600
+    repeats: 3
+    tasks:
+      - triton2triton/vllm_large/triton_awq_gemm
+      - triton2triton/vllm_large/triton_w8a8_block_scaled_mm
+      - hip2hip/gpumode_large/SoftmaxModule
+      - hip2hip/gpumode_large/SimpleMatmulModule
+    speedup_targets:
+      triton2triton/vllm_large/triton_awq_gemm: 12.391
+      triton2triton/vllm_large/triton_w8a8_block_scaled_mm: 3.320
+      hip2hip/gpumode_large/SoftmaxModule: 3.134
+      hip2hip/gpumode_large/SimpleMatmulModule: 11.458
 
 schedule:
   # This round runs ARMS="kf kf_wiki" (GEAK refuses to run as root in the runtime).
