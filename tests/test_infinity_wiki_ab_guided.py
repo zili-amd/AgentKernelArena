@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import json
+import os
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -33,6 +36,47 @@ def test_only_the_guided_arm_asks_forge_to_plan_from_the_playbook():
     assert guided["agent"]["target_mean_case_speedup"] == phase["speedup_targets"][TASK]
     for arm in ("kf", "kf_wiki"):
         assert "wiki_guided" not in make_configs.run_config(MANIFEST, phase, TASK, arm)["agent"]
+
+
+def test_a_by_slot_phase_starts_each_task_repeat_on_its_own_gpu_repeat_by_repeat(tmp_path):
+    phase = "guided3h_triton_hip"
+    spec = MANIFEST["phases"][phase]
+    # The phase's own schedule overrides the round's, which the other phases keep.
+    assert spec["schedule"]["waves"] == "by-slot" and MANIFEST["schedule"]["waves"] == "by-task"
+    prefixes = ("triton2triton/vllm_large/triton_awq_gemm", "triton2triton/rocmbench_open/hard/",
+                "hip2hip/gpumode_large/SoftmaxModule")
+    kept = [task for task in spec["tasks"] if task.startswith(prefixes)]
+    root = tmp_path / "root"
+    (root / "dist").mkdir(parents=True)
+    (root / "dist" / "arms.txt").write_text("kf_wiki_guided\n")
+    arm_dir = root / "aka-kf_wiki_guided" / "wiki_ab"
+    for task in spec["tasks"]:
+        config = arm_dir / "configs" / phase / task.replace("/", "__") / "kf_wiki_guided.yaml"
+        config.parent.mkdir(parents=True)
+        config.write_text("{}\n")
+    (arm_dir / "ca-certificates.crt").write_text("certificate\n")
+    claude = root / "agent-cli" / "bin" / "claude"
+    claude.parent.mkdir(parents=True)
+    claude.write_text("#!/bin/sh\n")
+    claude.chmod(0o755)
+    (root / "claude-home" / ".claude").mkdir(parents=True)
+    (root / "claude-home" / ".claude.json").write_text("{}\n")
+
+    out = subprocess.run(
+        ["bash", str(EXPERIMENT / "run_main.sh"), str(root), "--dry-run"],
+        env={**os.environ, "PHASE": phase, "TASKS_PREFIX": " ".join(prefixes)},
+        capture_output=True, text=True, check=True,
+    ).stdout
+
+    order = [(repeat, task) for repeat in range(3) for task in kept]
+    assert re.findall(r"slot: r(\d) (\S+) on GPU base (\d)", out) == [
+        (str(repeat), task, str(index % 8)) for index, (repeat, task) in enumerate(order)
+    ]
+    launched = re.findall(r"^GPU (\d) .*--run-suffix (\S+)\"?$", out, re.MULTILINE)
+    assert sorted(launched) == sorted(
+        (str(index % 8), f"{phase}-{task.split('/', 1)[1].replace('/', '.')}-r{repeat}-kf_wiki_guided")
+        for index, (repeat, task) in enumerate(order)
+    )
 
 
 def test_the_audit_knows_every_manifest_arm_and_which_may_use_the_wiki():

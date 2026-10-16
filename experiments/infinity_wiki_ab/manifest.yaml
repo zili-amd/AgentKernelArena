@@ -54,8 +54,10 @@ pins:
   # entry only when its reason follows it, and a builder answer whose ids are not shaped like P1 / G1 is renumbered
   # instead of refused (an N1-N6 answer had ended one run's GUIDED phase). d2f787b9: the comma rule applies to skip
   # and untried citations only, since a claim names each id with what it is (it had dropped a real P19 claim).
-  # Without --wiki-guided it plans as hyperloom_wiki.
-  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: forge-wiki-guided, commit: d2f787b9a5063b15400496b8714d5b9c012ca588}
+  # 183a6374: every guided role keeps the task's arithmetic (no BF16x3/BF16x2 or XF32/TF32 emulation of its multiply
+  # type), since a GUIDED round has no plan critic to hold it to the contract's numerical semantics. Without
+  # --wiki-guided it plans as hyperloom_wiki.
+  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: forge-wiki-guided, commit: 183a6374a4d262279e25ceac00e22b23a937f5e0}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
   # Test with infinity-wiki PR #1 (branch gfx942-memory-bound-reduction-gemv), one commit on main cdcda80.
   # Over the previous pin 0523818: main cdcda80 adds Hyperloom's knowledge cards (sources/community-kb) and the
@@ -255,6 +257,32 @@ phases:
       - Aiter-task-mi300/gemm_a16w16_nt_n2048_k2048
       - Aiter-task-mi300/gemm_a16w16_nt_n128_k6144
       - Aiter-task-mi300/gemm_a16w16_nt_n6144_k6144
+  guided3h_triton_hip:
+    # kf_wiki_guided alone (deploy with --arms kf_wiki_guided), 3 h per run, read for its first iteration against the
+    # guided_6h and guided_triton runs: the six Triton and two hip2hip tasks those phases ran, four per machine
+    # (start.sh main --phase guided3h_triton_hip --tasks ...), each (task, repeat) on its own GPU as soon as one is
+    # free, stopping at the main phase's targets.
+    timeout_seconds: 10800
+    repeats: 3
+    schedule: {waves: by-slot, gpu_bases: [0, 1, 2, 3, 4, 5, 6, 7]}
+    tasks:
+      - triton2triton/vllm_large/triton_awq_gemm
+      - triton2triton/vllm_large/triton_w8a8_block_scaled_mm
+      - triton2triton/rocmbench_open/hard/test_flashattention_fwd
+      - triton2triton/rocmbench_open/hard/gemm
+      - triton2triton/geak_eval_open/L3/gemm
+      - triton2triton/rocmbench_open/medium/naive_softmax
+      - hip2hip/gpumode_large/SoftmaxModule
+      - hip2hip/gpumode_large/SimpleMatmulModule
+    speedup_targets:
+      triton2triton/vllm_large/triton_awq_gemm: 12.391
+      triton2triton/vllm_large/triton_w8a8_block_scaled_mm: 3.320
+      triton2triton/rocmbench_open/hard/test_flashattention_fwd: 8.228
+      triton2triton/rocmbench_open/hard/gemm: 2.463
+      triton2triton/geak_eval_open/L3/gemm: 15.531
+      triton2triton/rocmbench_open/medium/naive_softmax: 19.019
+      hip2hip/gpumode_large/SoftmaxModule: 3.134
+      hip2hip/gpumode_large/SimpleMatmulModule: 11.458
 
 schedule:
   # This round runs ARMS="kf kf_wiki" (GEAK refuses to run as root in the runtime).
