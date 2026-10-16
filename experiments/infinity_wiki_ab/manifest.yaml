@@ -44,8 +44,13 @@ pins:
   # its own profile (showing it what earlier batches settled), plans one part per group, and one Implementer session
   # implements every part, reverting in-session a part that breaks or slows the kernel, measured once -- and GUIDED
   # ends when the builder finds no further direction or a batch brings no gain; the ranker, the step queue and the
-  # 35% share are gone. Without --wiki-guided it plans as hyperloom_wiki.
-  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: forge-wiki-guided, commit: a9abecb29f33128556a0235d970bc3fd5d1ea545}
+  # 35% share are gone. a4447b18, after the guided_6h invocation: a GUIDED round runs no plan critic (it had dropped
+  # every batch part that builds on an earlier one as a "concurrent lane from canonical"); the builder may add a
+  # direction only the round's evidence supports, marked "support": "profiling"; GUIDED also ends when a KEEP batch
+  # gains less than 2% (BATCH_LOW_GAIN); and the ledger counts only the ids that open each citation entry, lets a
+  # claim win, keeps an item the session did not get to open ([playbook-untried:...]), and records each skip's
+  # reason for the builder. Without --wiki-guided it plans as hyperloom_wiki.
+  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: forge-wiki-guided, commit: a4447b186b89294fc495330bd89600e0d3adebdb}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
   # Test with infinity-wiki PR #1 (branch gfx942-memory-bound-reduction-gemv), one commit on main cdcda80.
   # Over the previous pin 0523818: main cdcda80 adds Hyperloom's knowledge cards (sources/community-kb) and the
