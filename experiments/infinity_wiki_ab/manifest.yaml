@@ -49,8 +49,12 @@ pins:
   # direction only the round's evidence supports, marked "support": "profiling"; GUIDED also ends when a KEEP batch
   # gains less than 2% (BATCH_LOW_GAIN); and the ledger counts only the ids that open each citation entry, lets a
   # claim win, keeps an item the session did not get to open ([playbook-untried:...]), and records each skip's
-  # reason for the builder. Without --wiki-guided it plans as hyperloom_wiki.
-  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: forge-wiki-guided, commit: a4447b186b89294fc495330bd89600e0d3adebdb}
+  # reason for the builder. e3db6521, from the 6 h Triton runs' sessions: a batch is credited from the session's
+  # latest report only (a session the stop hook sends back submits again), an id after a comma opens a citation
+  # entry only when its reason follows it, and a builder answer whose ids are not shaped like P1 / G1 is renumbered
+  # instead of refused (an N1-N6 answer had ended one run's GUIDED phase). Without --wiki-guided it plans as
+  # hyperloom_wiki.
+  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: forge-wiki-guided, commit: e3db65217adba5babdb5cfe7e5b65c3b89155252}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
   # Test with infinity-wiki PR #1 (branch gfx942-memory-bound-reduction-gemv), one commit on main cdcda80.
   # Over the previous pin 0523818: main cdcda80 adds Hyperloom's knowledge cards (sources/community-kb) and the
