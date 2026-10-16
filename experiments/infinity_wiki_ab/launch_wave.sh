@@ -19,7 +19,11 @@ LEDGER="$ROOT/invocations.jsonl"
 # Model overrides the runner forwards into GEAK containers; unset so every arm uses agent.model.
 UNSET=(ANTHROPIC_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL
        ANTHROPIC_DEFAULT_HAIKU_MODEL CLAUDE_CODE_SUBAGENT_MODEL
-       KB_STORE_URL KB_STORE_TOKEN KNOWLEDGE_STORE_MODE KNOWLEDGE_LOCAL_ROOT AKA_KNOWLEDGE_WIKI_ROOT)
+       KB_STORE_URL KB_STORE_TOKEN KNOWLEDGE_STORE_MODE KNOWLEDGE_LOCAL_ROOT AKA_KNOWLEDGE_WIKI_ROOT
+       AKA_DOCKER_IMAGE)
+# A phase whose tasks pin their packages names its runtime image (phases.<name>.docker_image); the others run in
+# AKA's default image for the GPU.
+PHASE_IMAGE="$(python3 -c "import sys, yaml; print(yaml.safe_load(open(sys.argv[1]))['phases'][sys.argv[2]].get('docker_image') or '')" "$HERE/manifest.yaml" "$PHASE")"
 
 for arm in "${ARMS[@]}"; do
     [[ -f "$ROOT/aka-$arm/wiki_ab/configs/$PHASE/$SLUG/$arm.yaml" ]] \
@@ -78,6 +82,7 @@ for i in "${!ARMS[@]}"; do
     wiki_pin="$(python3 -c "import sys, yaml; v = yaml.safe_load(open(sys.argv[1]))['arms'][sys.argv[2]]['knowledge_wiki']
 print(v if isinstance(v, str) else 'wiki' if v else '')" "$HERE/manifest.yaml" "$arm")"
     [[ -n "$wiki_pin" ]] && env_args+=(AKA_KNOWLEDGE_WIKI_ROOT="$ROOT/src/infinity-${wiki_pin//_/-}")
+    [[ -n "$PHASE_IMAGE" ]] && env_args+=(AKA_DOCKER_IMAGE="$PHASE_IMAGE")
     command=(make docker-run CONFIG="wiki_ab/configs/$PHASE/$SLUG/$arm.yaml" RUN_ARGS="--run-suffix $tag")
     if [[ "$DRY_RUN" == "1" ]]; then
         printf 'GPU %s  %-9s cd %s && env %s %s\n' "$gpu" "$arm" "$ROOT/aka-$arm" "${env_args[*]}" "${command[*]}"

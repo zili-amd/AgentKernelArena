@@ -210,6 +210,20 @@ phases:
       triton2triton/vllm_large/triton_w8a8_block_scaled_mm: 3.320
       hip2hip/gpumode_large/SoftmaxModule: 3.134
       hip2hip/gpumode_large/SimpleMatmulModule: 11.458
+  mi300_aiter:
+    # kf vs kf_wiki_guided on three gfx942 variants of the Aiter FlyDSL GEMM tasks (tasks/Aiter-task-mi300), one
+    # machine, by-task waves, 6 h per run. Each task starts from AITER's FlyDSL split-K HGEMM and is optimized in
+    # FlyDSL against aiter.tuned_gemm, which on MI300X dispatches to hipBLASLt. The original Aiter tasks start empty,
+    # and an empty FlyDSL candidate takes forge's FlyDSL rewrite, which has no wiki-guided workflow; starting
+    # implemented puts both arms on forge-loop. The tasks need AITER dbd8bf5 and FlyDSL 0.3.2, hence the phase's
+    # image. No roofline targets, so every run uses its 6 h.
+    timeout_seconds: 21600
+    repeats: 3
+    docker_image: docker.io/primussafe/sglang:v0.5.18-rocm720-mi35x-aiter-dbd8bf5-flydsl032-20260921
+    tasks:
+      - Aiter-task-mi300/gemm_a16w16_nt_n2048_k2048
+      - Aiter-task-mi300/gemm_a16w16_nt_n128_k6144
+      - Aiter-task-mi300/gemm_a16w16_nt_n6144_k6144
 
 schedule:
   # This round runs ARMS="kf kf_wiki" (GEAK refuses to run as root in the runtime).
