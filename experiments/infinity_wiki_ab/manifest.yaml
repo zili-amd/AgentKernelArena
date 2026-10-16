@@ -52,9 +52,10 @@ pins:
   # reason for the builder. e3db6521, from the 6 h Triton runs' sessions: a batch is credited from the session's
   # latest report only (a session the stop hook sends back submits again), an id after a comma opens a citation
   # entry only when its reason follows it, and a builder answer whose ids are not shaped like P1 / G1 is renumbered
-  # instead of refused (an N1-N6 answer had ended one run's GUIDED phase). Without --wiki-guided it plans as
-  # hyperloom_wiki.
-  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: forge-wiki-guided, commit: e3db65217adba5babdb5cfe7e5b65c3b89155252}
+  # instead of refused (an N1-N6 answer had ended one run's GUIDED phase). d2f787b9: the comma rule applies to skip
+  # and untried citations only, since a claim names each id with what it is (it had dropped a real P19 claim).
+  # Without --wiki-guided it plans as hyperloom_wiki.
+  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: forge-wiki-guided, commit: d2f787b9a5063b15400496b8714d5b9c012ca588}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
   # Test with infinity-wiki PR #1 (branch gfx942-memory-bound-reduction-gemv), one commit on main cdcda80.
   # Over the previous pin 0523818: main cdcda80 adds Hyperloom's knowledge cards (sources/community-kb) and the
@@ -227,6 +228,27 @@ phases:
     # implemented puts both arms on forge-loop. The tasks need AITER dbd8bf5 and FlyDSL 0.3.2, hence the phase's
     # image. No roofline targets, so every run uses its 6 h.
     timeout_seconds: 21600
+    repeats: 3
+    docker_image: docker.io/primussafe/sglang:v0.5.18-rocm720-mi35x-aiter-dbd8bf5-flydsl032-20260921
+    tasks:
+      - Aiter-task-mi300/gemm_a16w16_nt_n2048_k2048
+      - Aiter-task-mi300/gemm_a16w16_nt_n128_k6144
+      - Aiter-task-mi300/gemm_a16w16_nt_n6144_k6144
+  guided3h_vllm:
+    # kf_wiki_guided alone (deploy with --arms kf_wiki_guided), 3 h per run, read for its first iteration against the
+    # guided_6h runs: the two vllm_large tasks in the default image, stopping at the main phase's targets. Every
+    # (task, repeat) runs on its own GPU at once with guided3h_aiter (start.sh pilot --phase ... --gpu-base N).
+    timeout_seconds: 10800
+    repeats: 3
+    tasks:
+      - triton2triton/vllm_large/triton_awq_gemm
+      - triton2triton/vllm_large/triton_w8a8_block_scaled_mm
+    speedup_targets:
+      triton2triton/vllm_large/triton_awq_gemm: 12.391
+      triton2triton/vllm_large/triton_w8a8_block_scaled_mm: 3.320
+  guided3h_aiter:
+    # The same for the three Aiter-task-mi300 GEMMs, in the image they pin (as mi300_aiter), no stop target.
+    timeout_seconds: 10800
     repeats: 3
     docker_image: docker.io/primussafe/sglang:v0.5.18-rocm720-mi35x-aiter-dbd8bf5-flydsl032-20260921
     tasks:
