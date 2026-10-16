@@ -255,6 +255,15 @@ preregistration:
   exclusion_rule: a run that fails audit_run.py (exit 1) is excluded and rerun with the same GPU slot.
 
 invocations:
+  - phase: mi300_aiter
+    started: 2026-10-16 08:29 UTC
+    aka: fc33b805   # with wiki ca5d232, hyperloom 8e24562d (kf) / hyperloom_wiki_guided a9abecb2 (kf_wiki_guided), Opus 5.5
+    arms: kf kf_wiki_guided
+    machines:
+      - {node: shared MI300X dev node E, tasks: "Aiter-task-mi300/ (3 tasks)"}
+    schedule: >-
+      by-task waves in manifest order, each task's 3 repeats of both arms at once on GPUs 0-5, 6 h per run, no
+      stop target; runtime image docker.io/primussafe/sglang:v0.5.18-rocm720-mi35x-aiter-dbd8bf5-flydsl032-20260921.
   - phase: guided_triton
     started: 2026-10-16 07:20 UTC
     aka: fd6aa051 on node A, c0a73db2 on node B   # c0a73db2 only adds the guided_6h phase; with wiki ca5d232, hyperloom 8e24562d (kf) / hyperloom_wiki_guided a9abecb2 (kf_wiki_guided), Opus 5.5
