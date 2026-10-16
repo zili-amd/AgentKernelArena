@@ -35,6 +35,33 @@ def test_only_the_guided_arm_asks_forge_to_plan_from_the_playbook():
         assert "wiki_guided" not in make_configs.run_config(MANIFEST, phase, TASK, arm)["agent"]
 
 
+def test_the_audit_knows_every_manifest_arm_and_which_may_use_the_wiki():
+    import audit_run
+
+    for name, arm in MANIFEST["arms"].items():
+        assert name in audit_run.ARMS
+        assert (name in audit_run.WIKI_ARMS) == bool(arm.get("knowledge_wiki"))
+        if arm.get("template") == "forge":
+            assert name in audit_run.FORGE_ARMS
+
+
+def test_the_guided_arms_wiki_calls_are_not_held_against_it(tmp_path):
+    import argparse
+
+    import audit_run
+
+    (tmp_path / "knowledge_wiki_calls.jsonl").write_text('{"role": "playbook", "command": "page"}\n')
+    (tmp_path / "engine.log").write_text("Knowledge base: /root/src/infinity-wiki\n")
+
+    def fails(arm):
+        report = audit_run.audit(argparse.Namespace(run_dir=[str(tmp_path)], arm=arm, expect_model=None,
+                                                    other_root=[], allow_host=[], wiki_log=None))
+        return [check for check, _ in report.items["FAIL"] if check == "rule3-wiki" and "no-wiki arm" in _]
+
+    assert fails("kf_wiki_guided") == []
+    assert fails("kf")
+
+
 def test_a_guided_arm_without_a_knowledge_base_is_refused():
     manifest = {**MANIFEST, "arms": {**MANIFEST["arms"], "bad": {"template": "forge", "hyperloom": "hyperloom",
                                                                  "knowledge_wiki": False, "wiki_guided": True}}}
