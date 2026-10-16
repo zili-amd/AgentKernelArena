@@ -36,8 +36,6 @@ def run_config(manifest: dict, phase: dict, task: str, arm: str) -> dict:
         if spec["template"] != "forge" or not spec["knowledge_wiki"]:
             raise ValueError(f"arm {arm}: wiki_guided needs the forge template and a knowledge_wiki pin")
         agent["wiki_guided"] = True
-        if "guided_budget_fraction" in spec:
-            agent["guided_budget_fraction"] = spec["guided_budget_fraction"]
     config = {"agent": agent, "tasks": [task], "target_gpu_model": "MI300",
               "log_directory": "logs", "workspace_directory_prefix": "workspace"}
     if spec["knowledge_wiki"]:

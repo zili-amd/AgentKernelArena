@@ -1182,24 +1182,24 @@ def test_forge_serves_the_knowledge_wiki_to_its_agents_as_engine_tools(tmp_path,
 GUIDED = {"agent": {"wiki_guided": True}, "knowledge_wiki": {"enabled": True}}
 
 
-def test_a_guided_run_asks_forge_loop_to_plan_from_the_playbook(tmp_path, monkeypatch):
+def test_a_guided_run_asks_forge_loop_to_plan_from_the_knowledge_base(tmp_path, monkeypatch):
     _knowledge_wiki_root(tmp_path, monkeypatch)
     command = _launched_command(tmp_path, monkeypatch, GUIDED)
     assert "forge-loop" in command and "--wiki-guided" in command
-    assert command[command.index("--guided-budget-fraction") + 1] == "0.35"
+    assert "--guided-budget-fraction" not in command
 
 
-def test_a_guided_run_passes_its_own_budget_share(tmp_path, monkeypatch):
+def test_a_guided_run_ignores_a_guided_budget_share(tmp_path, monkeypatch):
     _knowledge_wiki_root(tmp_path, monkeypatch)
     config = {**GUIDED, "agent": {"wiki_guided": True, "guided_budget_fraction": 0.5}}
     command = _launched_command(tmp_path, monkeypatch, config)
-    assert command[command.index("--guided-budget-fraction") + 1] == "0.5"
+    assert "--guided-budget-fraction" not in command
 
 
 def test_a_knowledge_wiki_run_without_the_flag_plans_as_before(tmp_path, monkeypatch):
     _knowledge_wiki_root(tmp_path, monkeypatch)
     command = _launched_command(tmp_path, monkeypatch, {"knowledge_wiki": {"enabled": True}})
-    assert "--wiki-guided" not in command and "--guided-budget-fraction" not in command
+    assert "--wiki-guided" not in command
 
 
 def test_a_guided_run_needs_the_knowledge_base(tmp_path, monkeypatch):
@@ -1213,9 +1213,7 @@ def test_a_guided_run_refuses_an_engine_that_would_plan_without_the_playbook(tmp
         _launched_command(tmp_path, monkeypatch, GUIDED, wiki_guided=False)
 
 
-@pytest.mark.parametrize(("key", "value"), [("wiki_guided", "yes"), ("wiki_guided", 1),
-                                            ("guided_budget_fraction", 0), ("guided_budget_fraction", 1.5),
-                                            ("guided_budget_fraction", "0.35")])
+@pytest.mark.parametrize(("key", "value"), [("wiki_guided", "yes"), ("wiki_guided", 1)])
 def test_guided_settings_are_validated(key, value):
     with pytest.raises(ValueError, match=key):
         adapter._config({"agent": {key: value}})
