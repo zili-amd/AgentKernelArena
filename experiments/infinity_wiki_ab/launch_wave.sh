@@ -49,6 +49,17 @@ if [[ "$DRY_RUN" == "0" ]]; then
     mkdir -p "$LOG_DIR"
 fi
 
+# AITER copies its JIT directory into $HOME when it cannot write there, and a pinned image can hold files only root
+# can read under it (the Aiter image's FlyDSL caches), so a run as another user fails at its first `import aiter`.
+# AITER copies only when $HOME/.aiter/jit is missing: seed it with what this user can read, as this user.
+seed_aiter_home() {  # host path of the run's container HOME
+    [[ -n "$PHASE_IMAGE" && "$(id -u)" != "0" && ! -e "$1/.aiter/jit" ]] || return 0
+    mkdir -p "$1/.aiter"
+    docker run --rm --user "$(id -u):$(id -g)" -v "$1/.aiter:/seed" --entrypoint bash "$PHASE_IMAGE" -c \
+        'src=/sgl-workspace/aiter/aiter/jit; [[ -d $src ]] || exit 0; cp -r "$src" /seed/ 2>/dev/null; [[ -d /seed/jit ]]' \
+        || echo "WARN: could not seed $1/.aiter/jit from $PHASE_IMAGE" >&2
+}
+
 record() {  # one JSON line per event; all values are plain tokens
     printf '{"event":"%s","phase":"%s","task":"%s","repeat":%s,"arm":"%s","gpu":%s,"run_suffix":"%s","time":"%s"%s}\n' \
         "$1" "$PHASE" "$TASK" "$REPEAT" "$2" "$3" "$4" "$(date -u +%FT%TZ)" "${5:-}" >> "$LEDGER"
@@ -89,6 +100,7 @@ print(v if isinstance(v, str) else 'wiki' if v else '')" "$HERE/manifest.yaml" "
         continue
     fi
     mkdir -p "$ROOT/aka-$arm/wiki_ab_results"
+    seed_aiter_home "$ROOT/aka-$arm/wiki_ab_results/home-$tag"
     (
         record start "$arm" "$gpu" "$tag"
         status=0
