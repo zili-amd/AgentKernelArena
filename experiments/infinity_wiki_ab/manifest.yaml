@@ -316,6 +316,24 @@ preregistration:
   exclusion_rule: a run that fails audit_run.py (exit 1) is excluded and rerun with the same GPU slot.
 
 invocations:
+  - phase: guided3h_vllm
+    started: 2026-10-16 23:29 UTC
+    aka: a3346a6c   # with wiki ca5d232, hyperloom_wiki_guided d2f787b9 (kf_wiki_guided only), Opus 5.5
+    arms: kf_wiki_guided
+    machines:
+      - {node: reserved MI300X node C, tasks: "triton2triton/vllm_large/triton_awq_gemm r0-r2 on GPUs 0-2"}
+      - {node: reserved MI300X node D, tasks: "triton2triton/vllm_large/triton_w8a8_block_scaled_mm r0-r2 on GPUs 0-2"}
+    schedule: every (task, repeat) on its own GPU at once with guided3h_aiter (start.sh pilot --phase), 3 h per run, 90% stop rule.
+    note: Read for its first iteration against the guided_6h runs (kf_wiki_guided a9abecb2 and kf).
+  - phase: guided3h_aiter
+    started: 2026-10-17 00:03 UTC
+    aka: 6ff3ac30   # node C/D's dist/experiment from 6ff3ac30 (launch_wave.sh, manifest.yaml), checkouts at a3346a6c; hyperloom_wiki_guided d2f787b9
+    arms: kf_wiki_guided
+    machines:
+      - {node: reserved MI300X node C, tasks: "Aiter-task-mi300/gemm_a16w16_nt_n2048_k2048 r0-r2 on GPUs 3-5, gemm_a16w16_nt_n6144_k6144 r0-r1 on GPUs 6-7"}
+      - {node: reserved MI300X node D, tasks: "Aiter-task-mi300/gemm_a16w16_nt_n128_k6144 r0-r2 on GPUs 3-5, gemm_a16w16_nt_n6144_k6144 r2 on GPU 6"}
+    schedule: every (task, repeat) on its own GPU, 3 h per run, no stop target, in aka-wiki-ab/sglang-aiter-dbd8bf5-flydsl032:nonroot.
+    note: The third launch of these nine runs; the first two failed their initial task validation (see exclusions).
   - phase: guided3h_triton_hip
     started: 2026-10-16 23:37 UTC
     aka: 2fac3a37   # with wiki ca5d232, hyperloom_wiki_guided 183a6374 (kf_wiki_guided), Opus 5.5
@@ -435,6 +453,15 @@ invocations:
       one wave per machine: its task's 3 repeats of kf and kf_wiki at once on GPUs 0-5, 12 h per run (the 90%
       stop rule can end a run earlier). These two tasks run on wiki ca5d232, which has pages for them.
 exclusions:
+  - runs: guided3h_aiter, all nine runs, launched 2026-10-16 23:29-23:33 UTC and again 23:46-23:48 UTC
+    stopped: by AKA within a minute of each launch, before the agent started
+    reason: >-
+      Every case of the initial task validation failed with [Errno 13]: the first launch at `import aiter`, whose copy
+      of AITER's root-owned JIT directory into $HOME hit 3871 FlyDSL caches only root can read; the second, after
+      seeding that copy (9ba60bfe), at the lock AITER takes under its hardcoded, root-owned /tmp/aiter_configs. Nodes
+      C and D run as a non-root user and node E's mi300_aiter as root. The third launch uses the image with those
+      paths opened (aiter-nonroot.Dockerfile). Each failed attempt's log, home and run directory is kept on its node
+      with a validation-failed- or validation-failed2- prefix.
   - runs: mi300_aiter Aiter-task-mi300/gemm_a16w16_nt_n128_k6144 r1 kf (GPU 2), r1 kf_wiki_guided (GPU 3), r2 kf (GPU 5), started 2026-10-16 14:14 UTC
     stopped: 2026-10-16 14:19 UTC, before the first agent call
     reason: >-
