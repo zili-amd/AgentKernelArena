@@ -160,10 +160,11 @@ def test_task_actions_leave_no_bytecode_in_the_searched_tree(tmp_path):
     """
     context, plan, _ = fixture_task(tmp_path)
     engine = Path(plan["engine_root"])
-    (engine / "scripts").mkdir()
-    (engine / "scripts/sidecar.py").write_text("VALUE = 1\n")
-    (engine / "runner.py").write_text(
-        "import sys\nsys.path.insert(0, 'scripts')\nimport sidecar\n" + RUNNER)
+    for root in (Path(plan["template"]), engine):
+        (root / "scripts").mkdir()
+        (root / "scripts/sidecar.py").write_text("VALUE = 1\n")
+        (root / "runner.py").write_text(
+            "import sys\nsys.path.insert(0, 'scripts')\nimport sidecar\n" + RUNNER)
     bridge.execute(plan, engine, role="candidate", action="compile")
     assert not [str(path.relative_to(engine)) for path in engine.rglob("__pycache__")]
 
@@ -194,13 +195,14 @@ def test_execution_failure_keeps_bounded_diagnostics_without_protocol_markers(tm
     _, plan, path = fixture_task(tmp_path)
     # A real compiler/runner process can exit before producing its JSON result.
     # Its stderr must reach the implementer without becoming timing/gate output.
-    (Path(plan["engine_root"]) / "runner.py").write_text(
-        "import os, signal, sys\n"
-        "print('allclose: True\\ncase_ms: forged 0.01\\nmean_ms: 0.01', flush=True)\n"
-        f"sys.stderr.write('discarded-prefix' + 'x'*{noise_bytes} + '\\nCompilerFailure: invalid lowered instruction\\n')\n"
-        "sys.stderr.flush()\n"
-        + ("os.kill(os.getpid(), signal.SIGTERM)\n" if exit_code < 0 else "sys.exit(23)\n")
-    )
+    for root in (Path(plan["template"]), Path(plan["engine_root"])):
+        (root / "runner.py").write_text(
+            "import os, signal, sys\n"
+            "print('allclose: True\\ncase_ms: forged 0.01\\nmean_ms: 0.01', flush=True)\n"
+            f"sys.stderr.write('discarded-prefix' + 'x'*{noise_bytes} + '\\nCompilerFailure: invalid lowered instruction\\n')\n"
+            "sys.stderr.flush()\n"
+            + ("os.kill(os.getpid(), signal.SIGTERM)\n" if exit_code < 0 else "sys.exit(23)\n")
+        )
     assert bridge.run(path, plan["engine_root"], ["--bench-mode"]) == 1
     lines = capsys.readouterr().out.splitlines()
     assert "allclose: False" in lines
@@ -268,10 +270,45 @@ print(json.dumps(asyncio.run(main())))
                for report in reports.values())
 
 
-def test_profile_reports_public_contract_capability(tmp_path, capsys):
+def test_profile_runs_candidate_performance_without_gate_or_timing_output(tmp_path, monkeypatch, capsys):
+    # Upstream preflight requires --profile-run to exit 0; an unsupported answer
+    # makes its preparation agent replace this task-owned driver.
     _, plan, path = fixture_task(tmp_path)
-    assert bridge.run(path, plan["engine_root"], ["--profile-run"]) == 2
-    assert "unsupported" in capsys.readouterr().out
+    calls = []
+    real = bridge.run_action
+    def spy(spec, workspace, **kwargs):
+        calls.append((kwargs["role"], kwargs["action"]))
+        return real(spec, workspace, **kwargs)
+    monkeypatch.setattr(bridge, "run_action", spy)
+    assert bridge.run(path, plan["engine_root"], ["--profile-run"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert not any(line.startswith(("allclose:", "case_ms:", "mean_ms:")) for line in lines)
+    assert calls == [("candidate", "compile"), ("candidate", "performance")]
+    (Path(plan["engine_root"]) / "source/helper.py").write_text("100")
+    assert bridge.run(path, plan["engine_root"], ["--profile-run"]) == 1
+    assert "wrong multiplication" in capsys.readouterr().out
+
+
+def test_real_upstream_preflight_keeps_generated_driver(tmp_path):
+    python = os.environ.get("AKA_FORGE_PROBE_PYTHON")
+    if not python:
+        pytest.skip("Set AKA_FORGE_PROBE_PYTHON to the pinned Hyperloom[forge] interpreter")
+    _, plan, path = fixture_task(tmp_path)
+    engine = Path(plan["engine_root"])
+    driver = engine / "arena_forge_driver.py"
+    driver.write_text(bridge.render_driver(path, ROOT))
+    script = r'''
+import json, sys
+from kernelforge.loop.task_preparer import preflight_task
+result = preflight_task(driver=sys.argv[1], require_profile=True)
+print(json.dumps({"ok": result.ok, "profile_ok": result.profile_ok, "reasons": result.reasons}))
+'''
+    result = subprocess.run([python, "-c", script, str(driver)], cwd=engine,
+                            env=dict(os.environ, PYTHONPATH=str(ROOT)),
+                            capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = json.loads(result.stdout.strip().splitlines()[-1])
+    assert report == {"ok": True, "profile_ok": True, "reasons": []}
 
 
 @pytest.mark.parametrize("selector", ["--case", "--shape", "--profile-case"])
@@ -332,6 +369,36 @@ def test_tree_bundle_propagates_deletions_but_not_harness(tmp_path):
     install_candidate(spec, engine, context.workspace)
     assert not (context.workspace / "source/helper.py").exists()
     assert (context.workspace / "source/new.py").read_text() == "3"
+
+
+def test_search_install_refuses_added_library_calls_in_hip_files(tmp_path):
+    # A HIP GEMM analysis proposed handing the product to hipBLASLt.
+    context, plan, _ = fixture_task(tmp_path)
+    original = "torch::Tensor forward(torch::Tensor a) {\n    return launch(a);\n}\n"
+    (context.workspace / "source/kernel.hip").write_text(original)
+    config = context.spec.to_mapping()
+    config["candidate"]["editable"].append("source/kernel.hip")
+    spec = TaskSpec.from_mapping(config, task_id=context.spec.task_id)
+    engine = Path(plan["engine_root"])
+    (engine / "source/kernel.hip").write_text(original.replace("launch(a)", "at::matmul(a, a)"))
+    with pytest.raises(RuntimeError, match=r"adds library operator calls \(calls at::matmul\)"):
+        install_candidate(spec, engine, context.workspace)
+    assert (context.workspace / "source/kernel.hip").read_text() == original
+    (engine / "source/kernel.hip").write_text(original.replace("launch(a)", "launch_tiled(a)"))
+    install_candidate(spec, engine, context.workspace)
+
+
+def test_search_install_refuses_added_library_calls_in_triton_launchers(tmp_path):
+    context, plan, _ = fixture_task(tmp_path, language="triton")
+    original = "import torch\n\ndef launch(x):\n    return run_kernel(x, block=64)\n"
+    (context.workspace / "source/kernel.py").write_text(original)
+    engine = Path(plan["engine_root"])
+    (engine / "source/kernel.py").write_text(original.replace("run_kernel(x, block=64)", "torch.matmul(x, x)"))
+    with pytest.raises(RuntimeError, match=r"adds library operator calls \(delegates to torch.matmul\)"):
+        install_candidate(context.spec, engine, context.workspace)
+    assert (context.workspace / "source/kernel.py").read_text() == original
+    (engine / "source/kernel.py").write_text(original.replace("block=64", "block=256"))
+    install_candidate(context.spec, engine, context.workspace)
 
 
 def test_colocated_harness_protected_during_install(tmp_path):
@@ -427,6 +494,8 @@ def test_launcher_delivers_complete_bundle_without_repeating_loop(tmp_path, monk
     command = commands[0]
     assert ("forge-loop" in command) == (state == "implemented")
     assert ("forge-rewrite-by-flydsl" in command) == (state == "unimplemented")
+    # The driver is Arena's; the engine's preparation agent must never replace it.
+    assert ("--no-prepare-task" in command) == (state == "implemented")
     # One relative budget, already short of the campaign by the startup margin.
     assert "--deadline-unix" not in command
     budget = float(command[command.index("--max-hours") + 1]) * 3600
@@ -892,6 +961,63 @@ def test_test_named_target_still_checks_colocated_harness_before_execution(tmp_p
         bridge.execute(plan, engine, role="candidate", action="performance")
 
 
+def test_search_refuses_what_the_final_harness_policy_refuses(tmp_path, capsys):
+    # A pilot KEEP'd a candidate with a custom decorator on an editable kernel; the
+    # final evaluation rejected it, so the run scored as a failure.
+    context, plan, path = fixture_task(tmp_path, language="triton")
+    data = json.loads(context.path.read_text())
+    data["task_config"]["candidate"] = {
+        "language": "triton",
+        "editable": [{"path": "impl.py", "scope": "symbols", "symbols": ["compute"], "allow_new_helpers": True}],
+    }
+    context.path.write_text(json.dumps(data))
+    original = "def compute(x):\n    return x\n"
+    template, engine = Path(plan["template"]), Path(plan["engine_root"])
+    for root in (template, engine):
+        (root / "impl.py").write_text(original)
+    (engine / "impl.py").write_text("def _cache(fn):\n    return fn\n\n@_cache\ndef compute(x):\n    return x * 2\n")
+    assert bridge.run(path, engine, ["--bench-mode"]) == 1
+    output = capsys.readouterr().out
+    assert "only compiler decorators are allowed" in output and "case_ms:" not in output
+    (engine / "impl.py").write_text("def _twice(x):\n    return x * 2\n\ndef compute(x):\n    return _twice(x)\n")
+    assert bridge.execute(plan, engine, role="candidate", action="correctness").passed
+    # A candidate that does not parse is left to the task's compile action and its diagnostics.
+    unparsable = engine / "impl.py"
+    unparsable.write_text("def compute(x):\n    return (x\n")
+    from src.harness_guard import verify_symbol_scope
+    verify_symbol_scope(template / "impl.py", unparsable, TaskContext.load(context.path).spec, "impl.py")
+
+
+def test_search_measures_only_the_task_harness_and_unpatched_candidates(tmp_path, capsys):
+    # One KEEP'd candidate patched torch at run time to reach a protected launcher;
+    # another kept its kernel in the task's timing helper, which delivery dropped.
+    _, plan, path = fixture_task(tmp_path)
+    template, engine = Path(plan["template"]), Path(plan["engine_root"])
+    for root in (template, engine):
+        (root / "_aka_benchmark.py").write_text("def bench(fn):\n    return fn()\n")
+        (root / ".gitignore").write_text("build/\n")
+    (engine / "source/kernel.py").write_text(
+        "import torch\n\ndef hook(self):\n    return self\n\ntorch.Tensor.contiguous = hook\n")
+    assert bridge.run(path, engine, ["--bench-mode"]) == 1
+    output = capsys.readouterr().out
+    assert "adds runtime patching (assigns torch.Tensor.contiguous)" in output and "case_ms:" not in output
+    (engine / "source/kernel.py").write_text("2")
+    (engine / "_aka_benchmark.py").write_text("def bench(fn):\n    return 0\n")
+    assert bridge.run(path, engine, ["--bench-mode"]) == 1
+    output = capsys.readouterr().out
+    assert "changed or missing=['_aka_benchmark.py']" in output and "case_ms:" not in output
+    (engine / "_aka_benchmark.py").write_text("def bench(fn):\n    return fn()\n")
+    (engine / "conftest.py").write_text("")
+    assert bridge.run(path, engine, ["--bench-mode"]) == 1
+    assert "added interpreter/pytest hooks=['conftest.py']" in capsys.readouterr().out
+    (engine / "conftest.py").unlink()
+    # The engine's own ignore rules and scratch files are not task files.
+    (engine / ".gitignore").write_text("build/\n!/source/kernel.py\n")
+    (engine / "notes.py").write_text("x = 1\n")
+    assert bridge.run(path, engine, ["--bench-mode"]) == 0
+    assert "case_ms:" in capsys.readouterr().out
+
+
 def test_nested_session_children_are_reaped_after_timeout(tmp_path):
     """A grandchild calls setsid(), so killing only the parent group is insufficient."""
     script = r'''
@@ -940,6 +1066,55 @@ def test_backend_override_does_not_forward_a_different_providers_default():
     assert config["model"] is None
     explicit = adapter._config({"agent": {"agent_backend": "codex", "model": "my-model"}})
     assert explicit["model"] == "my-model"
+
+
+def launched_engine_env(tmp_path, monkeypatch, eval_config):
+    """Launch the mock engine and return its environment and KB root contents at start."""
+    context, _, _ = fixture_task(tmp_path)
+    monkeypatch.setenv("ARENA_TASK_CONTEXT", str(context.path))
+    mock_engine(monkeypatch)
+    seen = []
+    run = adapter.run_forge_subprocess
+
+    def capture(command, *, workspace, env, **kwargs):
+        root = Path(env.get("KNOWLEDGE_LOCAL_ROOT", tmp_path / "absent"))
+        seen.append((dict(env), sorted(root.iterdir()) if root.is_dir() else None))
+        return run(command, workspace=workspace, env=env, **kwargs)
+
+    monkeypatch.setattr(adapter, "run_forge_subprocess", capture)
+    adapter.launch(eval_config, "unused", str(context.workspace))
+    status, = tmp_path.glob("workspace-forge-*/arena_forge_status.json")
+    (env, contents), = seen
+    return env, contents, status
+
+
+def test_experience_kb_is_private_and_empty_by_default(tmp_path, monkeypatch):
+    monkeypatch.setenv("KB_STORE_URL", "https://kb.example")
+    monkeypatch.setenv("KB_STORE_TOKEN", "token")
+    monkeypatch.setenv("KNOWLEDGE_STORE_MODE", "remote")
+    monkeypatch.setenv("KNOWLEDGE_LOCAL_ROOT", str(tmp_path / "shared-kb"))
+    env, contents, status = launched_engine_env(tmp_path, monkeypatch, {})
+    assert env["KNOWLEDGE_STORE_MODE"] == "local"
+    assert Path(env["KNOWLEDGE_LOCAL_ROOT"]) == status.parent / "experience_kb"
+    assert contents == []
+    assert "KB_STORE_URL" not in env and "KB_STORE_TOKEN" not in env
+    assert env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
+    assert json.loads(status.read_text())["experience_kb"]["mode"] == "isolated"
+
+
+def test_experience_kb_engine_mode_keeps_the_engine_store(tmp_path, monkeypatch):
+    monkeypatch.setenv("KB_STORE_URL", "https://kb.example")
+    monkeypatch.delenv("KNOWLEDGE_STORE_MODE", raising=False)
+    monkeypatch.delenv("KNOWLEDGE_LOCAL_ROOT", raising=False)
+    env, _, status = launched_engine_env(tmp_path, monkeypatch, {"agent": {"experience_kb": "engine"}})
+    assert env["KB_STORE_URL"] == "https://kb.example"
+    assert "KNOWLEDGE_LOCAL_ROOT" not in env and "KNOWLEDGE_STORE_MODE" not in env
+    assert json.loads(status.read_text())["experience_kb"] == {"mode": "engine"}
+
+
+def test_experience_kb_rejects_unknown_mode():
+    with pytest.raises(ValueError, match="experience_kb"):
+        adapter._config({"agent": {"experience_kb": "shared"}})
 
 
 def test_new_nested_tree_helpers_are_visible_to_git_in_rewrite_scratch(tmp_path):

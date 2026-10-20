@@ -15,6 +15,7 @@ import tempfile
 import uuid
 from urllib.parse import quote
 
+from src.harness_guard import verify_measured_tree
 from src.task_execution import TaskExecutionError, run_action
 from src.task_spec import resolve_task_path
 from agents.forge.task_context import TaskContext, bounded_spec
@@ -94,6 +95,9 @@ def evaluation_workspace(context: TaskContext, plan: dict, engine_root: Path, ro
     installed = install_candidate(context.spec, candidate, engine_root,
                                   reference=Path(plan["template"]))
     try:
+        # Measuring in the engine's tree is only sound while its harness is the task's.
+        verify_measured_tree(Path(plan["template"]), engine_root, context.spec,
+                             ignored=frozenset({".gitignore"}))
         yield engine_root
     finally:
         # A rewrite keeps its candidate under the producer's attempt directory.
@@ -110,6 +114,11 @@ def execute(plan: dict, engine_root: Path, *, role: str, action: str):
         phases = ["compile"] if action == "compile" else ["compile", action]
         if role == "candidate" and action == "performance":
             phases = ["compile", "correctness", "performance"]
+        if action == "profile":
+            # The task protocol has no kernel-only action, so a profiler sees
+            # the candidate's complete performance action: every manifest case,
+            # any reference timing the task performs, and its timing loop.
+            phases = ["compile", "performance"]
         result = None
         for step in phases:
             deadline = min(plan["deadline_unix"], plan.get("phase_deadline_unix", plan["deadline_unix"]))
@@ -165,20 +174,19 @@ def run(plan_path: str | Path, engine_root: str | Path, argv: list[str] | None =
     parser.add_argument("--warmup", type=int)
     parser.add_argument("--iters", type=int)
     args = parser.parse_args(argv)
-    if args.profile_run:
-        print('capability: {"profile": "unsupported", "reason": "no public task profiling action"}')
-        return 2
     role = "baseline" if args.ref_bench_mode else "candidate"
-    action = "performance" if args.bench_mode or args.ref_bench_mode else "compile" if args.compile_only else "correctness"
+    action = ("performance" if args.bench_mode or args.ref_bench_mode else "profile" if args.profile_run
+              else "compile" if args.compile_only else "correctness")
     try:
         result = execute(load_plan(Path(plan_path)), Path(engine_root).resolve(strict=True), role=role, action=action)
         if action == "performance":
             emit_timings(result)
-        else:
+        elif action != "profile":
             print("allclose: True")
         return 0
     except Exception as exc:
-        print("allclose: False")
+        if action != "profile":
+            print("allclose: False")
         print(f"arena_error: {type(exc).__name__}: {exc}")
         if isinstance(exc, (TaskExecutionError, ActionCheckFailure)) and exc.commands:
             command = exc.commands[-1]

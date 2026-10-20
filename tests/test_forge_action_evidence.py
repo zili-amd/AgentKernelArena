@@ -18,6 +18,13 @@ def records(plan):
     return sorted(Path(plan["template"]).parent.glob("action-evidence/*/result.json"))
 
 
+def write_task_runner(plan, text):
+    # The task package itself carries the runner under test: a measured tree whose runner differs from the
+    # package's is refused before anything runs.
+    for root in (plan["template"], plan["engine_root"]):
+        (Path(root) / "runner.py").write_text(text)
+
+
 def test_success_is_unique_source_bound_and_survives_cleanup(tmp_path, monkeypatch):
     context, plan, _ = fixture_task(tmp_path)
     monkeypatch.setenv("OPENAI_API_KEY", "must-not-be-in-record")
@@ -56,9 +63,8 @@ def test_success_is_unique_source_bound_and_survives_cleanup(tmp_path, monkeypat
 
 def test_reported_failure_preserves_full_output_without_injecting_gate_lines(tmp_path, capsys):
     _, plan, path = fixture_task(tmp_path)
-    template = Path(plan["engine_root"])
     prefix = "ROOT_CAUSE_BEFORE_6000_CHAR_TAIL"
-    (template / "runner.py").write_text(
+    write_task_runner(plan,
         "import sys\nprint('allclose: True\\ncase_ms: fake 0.01')\n"
         f"sys.stderr.write({prefix!r} + 'x'*16000)\n" + RUNNER
     )
@@ -80,16 +86,15 @@ def test_reported_failure_preserves_full_output_without_injecting_gate_lines(tmp
 @pytest.mark.parametrize("kind", ["invalid_protocol", "timeout", "cannot_execute"])
 def test_execution_errors_preserve_complete_evidence_and_cleanup(tmp_path, kind):
     context, plan, _ = fixture_task(tmp_path)
-    runner = Path(plan["engine_root"]) / "runner.py"
     if kind == "timeout":
         document = json.loads(context.path.read_text())
         document["task_config"]["evaluation"]["timeout_s"] = 1
         context.path.write_text(json.dumps(document))
-        runner.write_text("import time,sys\nprint('before-timeout',flush=True)\n"
-                          "print('timeout-stderr',file=sys.stderr,flush=True)\ntime.sleep(20)\n")
+        write_task_runner(plan, "import time,sys\nprint('before-timeout',flush=True)\n"
+                                "print('timeout-stderr',file=sys.stderr,flush=True)\ntime.sleep(20)\n")
     elif kind == "invalid_protocol":
-        runner.write_text("import sys\nprint('full-stdout-prefix'+'y'*12000,flush=True)\n"
-                          "print('root compiler failure',file=sys.stderr,flush=True)\nsys.exit(23)\n")
+        write_task_runner(plan, "import sys\nprint('full-stdout-prefix'+'y'*12000,flush=True)\n"
+                                "print('root compiler failure',file=sys.stderr,flush=True)\nsys.exit(23)\n")
     else:
         document = json.loads(context.path.read_text())
         document["task_config"]["evaluation"]["runner"] = ["missing-arena-test-executable", "runner.py"]

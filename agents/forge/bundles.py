@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 
+from src.harness_guard import verify_candidate_additions, verify_symbol_scope
 from src.task_spec import EditScope, TaskSpec, resolve_task_path
 
 _TRANSIENT = {".git", "__pycache__", ".pytest_cache", "forge_experiments", ".forge_rewrite"}
@@ -146,8 +147,12 @@ def install_candidate(spec: TaskSpec, source: Path, destination: Path,
     origin = destination if reference is None else reference
     for scope in spec.candidate.editable:
         if scope.scope == "symbols":
-            _check_symbols(resolve_task_path(origin, scope.path, must_exist=True),
-                           files[scope.path], scope)
+            original = resolve_task_path(origin, scope.path, must_exist=True)
+            _check_symbols(original, files[scope.path], scope)
+            # The search installs every candidate here, so it must refuse what the final evaluation refuses.
+            verify_symbol_scope(original, files[scope.path], spec, scope.path)
+    for relative, path in files.items():
+        verify_candidate_additions(resolve_task_path(origin, relative), path, relative, spec.candidate.language)
     for relative in files:
         resolve_task_path(destination, relative)
     # Propagate declared-tree deletions too, so a removed helper cannot survive

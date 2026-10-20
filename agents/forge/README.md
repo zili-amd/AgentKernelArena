@@ -151,7 +151,7 @@ Forge generates `arena_forge_driver.py` in its private engine workspace:
 | Default / `--mode` | Candidate compile, correctness |
 | `--bench-mode` | Candidate compile, correctness, performance |
 | `--ref-bench-mode` | Baseline compile, performance |
-| `--profile-run` | Explicit unsupported response; no public profiling action exists |
+| `--profile-run` | Candidate compile, performance; no gate or timing output |
 
 Baseline numerical validation is the framework's initial-validation policy;
 the driver never substitutes baseline correctness for candidate correctness.
@@ -215,6 +215,13 @@ hashes are preserved in the fresh Forge artifact directory; old experiment
 directories are never removed. The only disposable copy is the baseline tree,
 which lives in a temporary directory removed when its measurement ends; the
 candidate is measured in place, so a campaign makes no copy per assessment.
+Because the search's numbers come from that tree, each candidate assessment
+first applies the final evaluation's candidate policy, including its
+runtime-patching and library-call rules, and refuses to measure when a protected task file (a
+runner, reference or timing helper such as `_aka_benchmark.py`) differs from the
+task package, or when the tree gained a `conftest.py`, `sitecustomize.py`,
+`usercustomize.py` or `.pth` file. The engine's `.gitignore` and its own
+scratch files are not task files.
 Each driver invocation reaps its own descendants. Optimize and rewrite also
 run the native CLI beneath the standard-library-only [process supervisor](process_tree.py).
 It reaps the complete descendant tree on normal exit, failure or timeout,
@@ -368,14 +375,31 @@ Search defaults live in [agent_config.yaml](agent_config.yaml); the run may
 override `workflow`, `model`, `agent_backend`, `permission_mode`,
 `timeout_seconds`, `session_timeout_seconds`, `max_port_attempts`,
 `initialization_max_attempts`, `initialization_budget_fraction`,
-`supervisor_backend`, and `python`. An empty supervisor follows the selected
-backend. Lane count, task preparation, profiling, planning probes and knowledge
-warm starts follow the engine defaults. Arena publishes the task and leaves the
-search policy to Forge. Two consequences are load bearing. The public task
-protocol exposes no profiler invocation, so the bridge answers `--profile-run`
-with an explicit unsupported capability. A single-file upstream recipe cannot
-describe a multi-file candidate, so a task whose `candidate.editable` spans more
-than one file may receive a warm start that covers only part of its submission.
+`supervisor_backend`, `experience_kb`, and `python`.
+An empty supervisor follows the selected backend. Lane count, task preparation, profiling and planning probes
+follow the engine defaults. Arena publishes the task and leaves the search policy
+to Forge, except for the Experience KB below.
+
+The engine's task preparation requires `--profile-run` to exit 0; otherwise its
+preparation agent replaces this driver with one it writes, which then gates
+candidates by its own correctness check and reports case IDs that differ from
+the URL-encoded IDs in the baseline file, so no candidate earns a per-case
+speedup. The public task protocol has no kernel-only action, so `--profile-run`
+runs the candidate's complete performance action: a profiler sees every
+manifest case, any reference timing the task performs, and its timing loop.
+
+The engine reads and publishes its Experience KB by default and applies the
+best stored solution before iteration 1. With the default
+`experience_kb: isolated`, each invocation gets a fresh, empty local store under
+its artifact directory (`experience_kb/`): `KNOWLEDGE_STORE_MODE=local`,
+`KNOWLEDGE_LOCAL_ROOT` set to that directory, `KB_STORE_URL` and
+`KB_STORE_TOKEN` removed, and Claude auto memory disabled. No run can warm-start
+from another run's solutions, matching the GEAK adapter's disabled external warm
+starts. The status file records the mode and root, and the store stays inspectable
+after the run. `experience_kb: engine` restores the engine's own store and
+warm-start defaults; under it, a single-file upstream recipe cannot describe a
+multi-file candidate, so a task whose `candidate.editable` spans more than one
+file may receive a warm start that covers only part of its submission.
 
 Search behaviour stays behind what the removed patch layer forced until the
 engine grows the seams it took: no injected protected paths, no total wall clock

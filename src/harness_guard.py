@@ -417,6 +417,26 @@ def _v2_digests(root: Path, spec: TaskSpec, paths: Iterable[str],
     return result
 
 
+def verify_symbol_scope(original: Path, candidate: Path, spec: TaskSpec, relative: str) -> None:
+    """Apply the final evaluation's policy to one symbol-scoped candidate file.
+
+    An agent searching over candidates calls this for each one, so that a
+    candidate the evaluator would reject fails while the agent can still read why.
+    """
+    edit = next(e for e in spec.candidate.editable if e.scope == "symbols" and e.path == relative)
+    try:
+        ast.parse(candidate.read_text(encoding="utf-8"))
+    except (UnicodeError, SyntaxError):
+        # The task's own compile action reports it with the compiler's diagnostics.
+        return
+    initial = _top_level_names(original)
+    entrypoints = frozenset(e.symbol for e in spec.candidate.entrypoints if e.file == relative and e.symbol)
+    if (_v2_symbol_digest(candidate, edit, initial, entrypoints)
+            != _v2_symbol_digest(original, edit, initial, entrypoints)):
+        raise RuntimeError(f"Protected test/harness policy rejected {candidate.name}: "
+                           "it changes statements outside its editable definitions")
+
+
 # Ways Python code can rewrite other code at run time. A kernel, its launcher and
 # their helpers need none of them, and a candidate that adds one can make
 # protected code (a launcher, a reference, the timing loop) run differently
@@ -609,6 +629,42 @@ def _editable_checked_files(root: Path, spec: TaskSpec) -> list[str]:
                 and (root / edit.path).is_file():
             files.append(edit.path)
     return files
+
+
+def verify_candidate_additions(original: Path | None, candidate: Path, relative: str,
+                               language: str | None = None) -> None:
+    """Apply the final evaluation's runtime-patching and library-call policy to one candidate file."""
+    current = _patching_sites_of(candidate, language)
+    if current is not None:
+        initial = (_patching_sites_of(original, language)
+                   if original is not None and original.is_file() else None)
+        _reject_added_patching(relative, current, initial or Counter())
+
+
+_STARTUP_HOOKS = frozenset({"conftest.py", "sitecustomize.py", "usercustomize.py"})
+
+
+def verify_measured_tree(reference: Path, root: Path, spec: TaskSpec, *,
+                         ignored: frozenset[str] = frozenset()) -> None:
+    """Refuse to measure ``root`` when its protected files differ from ``reference``.
+
+    An agent searching in its own tree is measured there, so a changed timing
+    helper or runner would change the numbers it optimizes. Files only the
+    agent created are not part of any measurement and stay, except ones the
+    interpreter or pytest load on their own.
+    """
+    expected = snapshot_workspace_harness(reference, task_spec=spec)
+    selected = {relative: digest for relative, digest in expected.digests.items() if relative not in ignored}
+    current = _v2_digests(root, spec, selected, expected.initial_symbols)
+    changed = sorted(relative for relative, digest in selected.items() if current.get(relative) != digest)
+    hooks = sorted(path.relative_to(root).as_posix() for path in _v2_files(root)
+                   if (path.name in _STARTUP_HOOKS or path.suffix == ".pth")
+                   and path.relative_to(root).as_posix() not in expected.digests)
+    if changed or hooks:
+        details = [f"changed or missing={changed}"] if changed else []
+        details += [f"added interpreter/pytest hooks={hooks}"] if hooks else []
+        raise RuntimeError("Protected task files differ from the task package, so this tree cannot be "
+                           "measured: " + "; ".join(details) + ". Restore them; edit only the declared candidate.")
 
 
 def _is_protected_path(rel: Path) -> bool:
