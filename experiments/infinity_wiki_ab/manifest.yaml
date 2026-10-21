@@ -26,7 +26,9 @@ pins:
   # target escape the test-name protection (c4a848920): without it every edit to the attention task's
   # test_flashattention_fwd.py is denied. Both also take --target-mean-case-speedup, which the main phase
   # sets per task (phases.main.speedup_targets) so a run stops at 90% of its roofline mean case speedup.
-  hyperloom: {repo: AMD-AGI/Hyperloom, branch: forge-reasoning-main, commit: 8e24562d7bd87795317fcbca8338acd63f449d8f}
+  # aiter-ab-1021: arm kf runs Hyperloom main as of 2026-10-21 (bb2da633); the pin above it was forge-reasoning-main
+  # 8e24562d for every earlier invocation.
+  hyperloom: {repo: AMD-AGI/Hyperloom, branch: main, commit: bb2da63332dcbc46bdf10702c516ef43eb80a016}
   hyperloom_wiki: {repo: AMD-AGI/Hyperloom, branch: forge-knowledge-wiki-reasoning-main, commit: 33f0c340a78a497b776b8ee0d665fa2fffcc432c}
   # The guided round's engine (arm kf_wiki_guided): hyperloom_wiki plus forge-loop --wiki-guided (528b463e), which
   # first builds a playbook from the knowledge base and plans from it -- one whole open group per lane, cited and
@@ -57,7 +59,10 @@ pins:
   # 183a6374: every guided role keeps the task's arithmetic (no BF16x3/BF16x2 or XF32/TF32 emulation of its multiply
   # type), since a GUIDED round has no plan critic to hold it to the contract's numerical semantics. Without
   # --wiki-guided it plans as hyperloom_wiki.
-  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: forge-wiki-guided, commit: 183a6374a4d262279e25ceac00e22b23a937f5e0}
+  # aiter-ab-1021: arm kf_wiki_guided runs Hyperloom PR #2036 (feat/kernelforge-wiki-guided-mode e9c16143, stacked
+  # on #2034 and main bb2da633): the first round is one knowledge base batch, then plain KernelForge with the
+  # knowledge base tools withdrawn.
+  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: feat/kernelforge-wiki-guided-mode, commit: e9c1614370a86a5d37e3de50f2efd040433a1a44}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
   # Test with infinity-wiki PR #1 (branch gfx942-memory-bound-reduction-gemv), one commit on main cdcda80.
   # Over the previous pin 0523818: main cdcda80 adds Hyperloom's knowledge cards (sources/community-kb) and the
@@ -68,7 +73,9 @@ pins:
   # being measured; a page giving a task's exact solution is not. main ca5d232 merges that PR (#1) and PR #2,
   # gfx942 weight-only INT4 GEMM and block-scaled FP8 GEMM pages, for the two vllm_large tasks. The main
   # invocation started 2026-10-15 04:14 UTC runs on 26ea276 (v4-pr1); later invocations record their own.
-  wiki: {repo: AMD-BRAIN-Internal/infinity-wiki, branch: main, commit: ca5d232ebddb2b6a7eeabb569c5c84b964c6c83c, variant: v5-main-pr2}
+  # aiter-ab-1021: main dee3c02 adds PR #3 (gfx942/gfx950 gap fill: FP8 scale layout, decode tiling, split-K
+  # precision, cache policy) and regenerates the pages from their source artifacts.
+  wiki: {repo: AMD-BRAIN-Internal/infinity-wiki, branch: main, commit: dee3c02d373483692564e868fcef2622fdd81843, variant: v6-main-pr3}
   # Opus 5.5, identical in every arm. claude-opus-5-5 answered on 2026-10-15 through Claude Code 2.1.296
   # (setup_node.sh's pin); Claude Code older than 2.1.280 cannot use this model.
   model: claude-opus-5-5
@@ -235,6 +242,18 @@ phases:
     tasks:
       - Aiter-task-mi300/gemm_a16w16_nt_n2048_k2048
       - Aiter-task-mi300/gemm_a16w16_nt_n128_k6144
+      - Aiter-task-mi300/gemm_a16w16_nt_n6144_k6144
+  aiter_ab:
+    # A/B on the three Aiter-task-mi300 GEMMs: kf_wiki_guided (PR #2036 with --wiki-guided and the knowledge base)
+    # against kf (Hyperloom main), 3 repeats of each, 6 h per run, no targets. Both arms of a (task, repeat) run at
+    # once on an adjacent GPU pair (start.sh pilot --phase aiter_ab --task T --repeat N --gpu-base B). The runs are
+    # root, so the phase uses the Aiter image itself; aiter-nonroot.Dockerfile is only for non-root users.
+    timeout_seconds: 21600
+    repeats: 3
+    docker_image: docker.io/primussafe/sglang:v0.5.18-rocm720-mi35x-aiter-dbd8bf5-flydsl032-20260921
+    tasks:
+      - Aiter-task-mi300/gemm_a16w16_nt_n128_k6144
+      - Aiter-task-mi300/gemm_a16w16_nt_n2048_k2048
       - Aiter-task-mi300/gemm_a16w16_nt_n6144_k6144
   guided3h_vllm:
     # kf_wiki_guided alone (deploy with --arms kf_wiki_guided), 3 h per run, read for its first iteration against the

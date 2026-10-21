@@ -25,7 +25,7 @@ def test_the_guided_arm_runs_its_own_engine_with_the_knowledge_base():
     arm = MANIFEST["arms"]["kf_wiki_guided"]
     assert arm["wiki_guided"] is True
     assert arm["knowledge_wiki"] == MANIFEST["arms"]["kf_wiki"]["knowledge_wiki"]
-    assert MANIFEST["pins"][arm["hyperloom"]]["branch"] == "forge-wiki-guided"
+    assert "wiki-guided" in MANIFEST["pins"][arm["hyperloom"]]["branch"]
 
 
 def test_only_the_guided_arm_asks_forge_to_plan_from_the_playbook():
