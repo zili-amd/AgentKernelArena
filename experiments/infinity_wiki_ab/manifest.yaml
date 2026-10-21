@@ -75,7 +75,9 @@ pins:
   # invocation started 2026-10-15 04:14 UTC runs on 26ea276 (v4-pr1); later invocations record their own.
   # aiter-ab-1021: main dee3c02 adds PR #3 (gfx942/gfx950 gap fill: FP8 scale layout, decode tiling, split-K
   # precision, cache policy) and regenerates the pages from their source artifacts.
-  wiki: {repo: AMD-BRAIN-Internal/infinity-wiki, branch: main, commit: dee3c02d373483692564e868fcef2622fdd81843, variant: v6-main-pr3}
+  # decode-attn-ab-1021: wiki-gap-fill-decode-attention-isa e6ab004, one commit on main dee3c02 adding MLA decode,
+  # split-KV/Lean decode attention and gfx942-vs-gfx950 ISA pages; taken from a local branch not yet on GitHub.
+  wiki: {repo: AMD-BRAIN-Internal/infinity-wiki, branch: wiki-gap-fill-decode-attention-isa, commit: e6ab004cd541e6c72ea94b4be97fab9c585681d3, variant: v7-decode-attention-isa}
   # Opus 5.5, identical in every arm. claude-opus-5-5 answered on 2026-10-15 through Claude Code 2.1.296
   # (setup_node.sh's pin); Claude Code older than 2.1.280 cannot use this model.
   model: claude-opus-5-5
@@ -255,6 +257,15 @@ phases:
       - Aiter-task-mi300/gemm_a16w16_nt_n128_k6144
       - Aiter-task-mi300/gemm_a16w16_nt_n2048_k2048
       - Aiter-task-mi300/gemm_a16w16_nt_n6144_k6144
+  decode_attn_ab:
+    # The same A/B as aiter_ab (kf_wiki_guided on PR #2036 against kf on Hyperloom main) on two decode-attention
+    # tasks, one per machine: each task's 3 repeats of both arms at once on GPUs 0-5, 6 h per run, no targets, in
+    # AKA's default gfx942 image.
+    timeout_seconds: 21600
+    repeats: 3
+    tasks:
+      - hip2hip/mla_decode
+      - triton2triton/geak_eval/L2/lean_atten_paged
   guided3h_vllm:
     # kf_wiki_guided alone (deploy with --arms kf_wiki_guided), 3 h per run, read for its first iteration against the
     # guided_6h runs: the two vllm_large tasks in the default image, stopping at the main phase's targets. Every
