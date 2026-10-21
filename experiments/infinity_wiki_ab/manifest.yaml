@@ -255,6 +255,14 @@ phases:
       - Aiter-task-mi300/gemm_a16w16_nt_n128_k6144
       - Aiter-task-mi300/gemm_a16w16_nt_n2048_k2048
       - Aiter-task-mi300/gemm_a16w16_nt_n6144_k6144
+  moe_ab:
+    # The aiter_ab A/B on rocmbench's Triton MoE GEMM (screened: 16 cases, 25% at the launch floor, 4.4x headroom):
+    # kf_wiki_guided (PR #2036) against kf (Hyperloom main), 3 repeats of each, 6 h per run, no target, in the
+    # default image.
+    timeout_seconds: 21600
+    repeats: 3
+    tasks:
+      - triton2triton/rocmbench/hard/moe_gemm
   guided3h_vllm:
     # kf_wiki_guided alone (deploy with --arms kf_wiki_guided), 3 h per run, read for its first iteration against the
     # guided_6h runs: the two vllm_large tasks in the default image, stopping at the main phase's targets. Every
