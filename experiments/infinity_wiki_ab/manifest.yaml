@@ -336,6 +336,16 @@ preregistration:
 
 invocations:
   - phase: aiter_ab
+    started: 2026-10-21 23:20 UTC
+    aka: ca75d0d8   # zili-amd/AgentKernelArena aiter-ab-1021; wiki dee3c02, hyperloom main bb2da633 (kf) / PR #2036 e9c16143 (kf_wiki_guided), Opus 5.5
+    arms: kf kf_wiki_guided
+    machines:
+      - {node: shared MI300X dev node A, tasks: gemm_a16w16_nt_n6144_k6144}
+    schedule: >-
+      gemm_a16w16_nt_n6144_k6144 alone: its 3 repeats of both arms at once on GPUs 0-5, 6 h per run, no target.
+      Root runs in the phase's Aiter image.
+    note: Replaces the first invocation's waves; node A had no other GPU user at launch, node B's GPUs were taken.
+  - phase: aiter_ab
     started: 2026-10-21 21:03 UTC
     aka: ca75d0d8   # zili-amd/AgentKernelArena aiter-ab-1021; wiki dee3c02, hyperloom main bb2da633 (kf) / PR #2036 e9c16143 (kf_wiki_guided), Opus 5.5
     arms: kf kf_wiki_guided
@@ -345,6 +355,9 @@ invocations:
     schedule: >-
       by-task waves: each task's 3 repeats of both arms at once on GPUs 0-5, 6 h per run, no target; node A starts
       n6144_k6144 after n128_k6144 ends. Root runs in the phase's Aiter image.
+    note: >-
+      Stopped at 23:15 UTC on request, about 2 h 10 min into both waves, before n6144_k6144 started; the partial runs
+      stay on the nodes. Node B's GPUs were shared with another user's jobs during the wave.
   - phase: guided3h_vllm
     started: 2026-10-16 23:29 UTC
     aka: a3346a6c   # with wiki ca5d232, hyperloom_wiki_guided d2f787b9 (kf_wiki_guided only), Opus 5.5
