@@ -343,6 +343,15 @@ preregistration:
   exclusion_rule: a run that fails audit_run.py (exit 1) is excluded and rerun with the same GPU slot.
 
 invocations:
+  - phase: moe_ab
+    started: 2026-10-21 23:48 UTC
+    aka: 44c5bd08   # zili-amd/AgentKernelArena aiter-ab-1021; wiki dee3c02, hyperloom main bb2da633 (kf) / PR #2036 e9c16143 (kf_wiki_guided), Opus 5.5
+    arms: kf kf_wiki_guided
+    machines:
+      - {node: shared MI300X dev node F, tasks: triton2triton/rocmbench/hard/moe_gemm}
+    schedule: its 3 repeats of both arms at once on GPUs 0-5, 6 h per run, no target, in the default image.
+    note: >-
+      A launch on node B at 23:36 UTC was stopped at 23:40: another user's training job held all eight of its GPUs.
   - phase: aiter_ab
     started: 2026-10-21 23:20 UTC
     aka: ca75d0d8   # zili-amd/AgentKernelArena aiter-ab-1021; wiki dee3c02, hyperloom main bb2da633 (kf) / PR #2036 e9c16143 (kf_wiki_guided), Opus 5.5
