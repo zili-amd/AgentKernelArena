@@ -62,7 +62,9 @@ pins:
   # aiter-ab-1021: arm kf_wiki_guided runs Hyperloom PR #2036 (feat/kernelforge-wiki-guided-mode e9c16143, stacked
   # on #2034 and main bb2da633): the first round is one knowledge base batch, then plain KernelForge with the
   # knowledge base tools withdrawn.
-  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: feat/kernelforge-wiki-guided-mode, commit: e9c1614370a86a5d37e3de50f2efd040433a1a44}
+  # aiter-fix-1022: PR #2036 head 3b6481cf (one commit on e9c16143, still on main bb2da633): a batch session is held to
+  # its parts until its wrap-up time. The aiter_ab and moe_ab invocations ran e9c16143.
+  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: feat/kernelforge-wiki-guided-mode, commit: 3b6481cf09968a91f9c6e8ed2a969938f1ff4830}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
   # Test with infinity-wiki PR #1 (branch gfx942-memory-bound-reduction-gemv), one commit on main cdcda80.
   # Over the previous pin 0523818: main cdcda80 adds Hyperloom's knowledge cards (sources/community-kb) and the
@@ -259,6 +261,22 @@ phases:
     # The aiter_ab A/B on rocmbench's Triton MoE GEMM (screened: 16 cases, 25% at the launch floor, 4.4x headroom):
     # kf_wiki_guided (PR #2036) against kf (Hyperloom main), 3 repeats of each, 6 h per run, no target, in the
     # default image.
+    timeout_seconds: 21600
+    repeats: 3
+    tasks:
+      - triton2triton/rocmbench/hard/moe_gemm
+  aiter_fix:
+    # The aiter_ab A/B rerun on PR #2036 3b6481cf, whose batch session no longer stops before its wrap-up time with
+    # parts left. Tasks in priority order: by-task waves run n6144_k6144 and n2048_k2048 first, n128_k6144 after.
+    timeout_seconds: 21600
+    repeats: 3
+    docker_image: docker.io/primussafe/sglang:v0.5.18-rocm720-mi35x-aiter-dbd8bf5-flydsl032-20260921
+    tasks:
+      - Aiter-task-mi300/gemm_a16w16_nt_n6144_k6144
+      - Aiter-task-mi300/gemm_a16w16_nt_n2048_k2048
+      - Aiter-task-mi300/gemm_a16w16_nt_n128_k6144
+  moe_fix:
+    # The moe_ab A/B rerun on PR #2036 3b6481cf, in the default image.
     timeout_seconds: 21600
     repeats: 3
     tasks:
