@@ -378,6 +378,8 @@ invocations:
     schedule: its 3 repeats of both arms at once on GPUs 0-5, 6 h per run, no target, in the default image.
     note: >-
       A launch on node B at 23:36 UTC was stopped at 23:40: another user's training job held all eight of its GPUs.
+      Stopped at 00:55 UTC on 2026-10-22 on request, after round 1, to rerun once the batch session's early stop is
+      fixed.
   - phase: aiter_ab
     started: 2026-10-21 23:20 UTC
     aka: ca75d0d8   # zili-amd/AgentKernelArena aiter-ab-1021; wiki dee3c02, hyperloom main bb2da633 (kf) / PR #2036 e9c16143 (kf_wiki_guided), Opus 5.5
@@ -387,7 +389,9 @@ invocations:
     schedule: >-
       gemm_a16w16_nt_n6144_k6144 alone: its 3 repeats of both arms at once on GPUs 0-5, 6 h per run, no target.
       Root runs in the phase's Aiter image.
-    note: Replaces the first invocation's waves; node A had no other GPU user at launch, node B's GPUs were taken.
+    note: >-
+      Replaces the first invocation's waves; node A had no other GPU user at launch, node B's GPUs were taken. Stopped
+      at 00:55 UTC on 2026-10-22 on request, after round 1, to rerun once the batch session's early stop is fixed.
   - phase: aiter_ab
     started: 2026-10-21 21:03 UTC
     aka: ca75d0d8   # zili-amd/AgentKernelArena aiter-ab-1021; wiki dee3c02, hyperloom main bb2da633 (kf) / PR #2036 e9c16143 (kf_wiki_guided), Opus 5.5
