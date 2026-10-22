@@ -263,6 +263,32 @@ phases:
     repeats: 3
     tasks:
       - triton2triton/rocmbench/hard/moe_gemm
+  mxfp4_seed:
+    # Seeds for mxfp4_moe_ab, on MI355X (Spur, gfx950). Both MXFP4 MoE tasks start from an empty FlyDSL module, which
+    # takes forge's FlyDSL rewrite, and the adapter refuses wiki_guided there. So kf (Hyperloom main) runs the rewrite
+    # alone (ARMS=kf), 3 repeats per task on one GPU each, and the first correct port it commits -- before its search
+    # begins -- becomes the shared initial candidate of both A/B arms. Not an A/B: its results are not compared.
+    # Runs as the Spur user, hence the non-root image (aiter-nonroot.Dockerfile on mi300_aiter's image).
+    timeout_seconds: 10800
+    repeats: 3
+    target_gpu_model: MI355X
+    docker_image: aka-wiki-ab/sglang-aiter-dbd8bf5-flydsl032:nonroot
+    tasks:
+      - Aiter-task/mxfp4_moe_e33_i1024
+      - Aiter-task/mxfp4_moe_e257_i128
+  mxfp4_moe_ab:
+    # A/B on MI355X (Spur, gfx950): kf_wiki_guided (PR #2036 with --wiki-guided and the knowledge base) against kf
+    # (Hyperloom main) on the two MXFP4 MoE tasks, each starting implemented from its mxfp4_seed port
+    # (tasks/Aiter-task-seeded), 2 repeats, 6 h per run, no target. All four (task, repeat) pairs at once on one
+    # exclusive 8-GPU node, both arms of a pair on adjacent GPUs.
+    timeout_seconds: 21600
+    repeats: 2
+    target_gpu_model: MI355X
+    docker_image: aka-wiki-ab/sglang-aiter-dbd8bf5-flydsl032:nonroot
+    schedule: {waves: by-slot, gpu_bases: [0, 2, 4, 6]}
+    tasks:
+      - Aiter-task-seeded/mxfp4_moe_e33_i1024
+      - Aiter-task-seeded/mxfp4_moe_e257_i128
   guided3h_vllm:
     # kf_wiki_guided alone (deploy with --arms kf_wiki_guided), 3 h per run, read for its first iteration against the
     # guided_6h runs: the two vllm_large tasks in the default image, stopping at the main phase's targets. Every

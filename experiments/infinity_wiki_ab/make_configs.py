@@ -36,7 +36,7 @@ def run_config(manifest: dict, phase: dict, task: str, arm: str) -> dict:
         if spec["template"] != "forge" or not spec["knowledge_wiki"]:
             raise ValueError(f"arm {arm}: wiki_guided needs the forge template and a knowledge_wiki pin")
         agent["wiki_guided"] = True
-    config = {"agent": agent, "tasks": [task], "target_gpu_model": "MI300",
+    config = {"agent": agent, "tasks": [task], "target_gpu_model": phase.get("target_gpu_model", "MI300"),
               "log_directory": "logs", "workspace_directory_prefix": "workspace"}
     if spec["knowledge_wiki"]:
         config["knowledge_wiki"] = {"enabled": True}
