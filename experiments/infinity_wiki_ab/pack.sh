@@ -54,7 +54,7 @@ if [[ " ${ARMS[*]} " == *" geak"* ]]; then
 fi
 
 python3 "$HERE/make_configs.py" --out "$DIST/experiment/configs" >/dev/null
-cp "$HERE"/*.yaml "$HERE"/*.sh "$HERE"/*.py "$HERE/TEST_RECORD_TEMPLATE.md" "$HERE/PROTOCOL.md" "$DIST/experiment/"
+cp "$HERE"/*.yaml "$HERE"/*.sh "$HERE"/*.py "$HERE"/*.Dockerfile "$HERE/TEST_RECORD_TEMPLATE.md" "$HERE/PROTOCOL.md" "$DIST/experiment/"
 printf '%s\n' "${ARMS[@]}" > "$DIST/arms.txt"
 du -sh "$DIST"/*.bundle
 cat "$DIST/pins.txt"
