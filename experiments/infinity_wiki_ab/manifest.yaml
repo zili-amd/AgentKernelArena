@@ -62,7 +62,9 @@ pins:
   # aiter-ab-1021: arm kf_wiki_guided runs Hyperloom PR #2036 (feat/kernelforge-wiki-guided-mode e9c16143, stacked
   # on #2034 and main bb2da633): the first round is one knowledge base batch, then plain KernelForge with the
   # knowledge base tools withdrawn.
-  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: feat/kernelforge-wiki-guided-mode, commit: e9c1614370a86a5d37e3de50f2efd040433a1a44}
+  # decode-attn-ab-1022: PR #2036 3b6481cf, one commit on e9c16143: the batch session keeps working through its
+  # parts until its wrap-up time instead of reporting items untried or dropped early.
+  hyperloom_wiki_guided: {repo: AMD-AGI/Hyperloom, branch: feat/kernelforge-wiki-guided-mode, commit: 3b6481cf09968a91f9c6e8ed2a969938f1ff4830}
   geak: {commit: c0c0e2aee5e2bec70583253058382523bdf7a3ab}   # agents/geak/compatibility.py UPSTREAM_REVISION
   # Test with infinity-wiki PR #1 (branch gfx942-memory-bound-reduction-gemv), one commit on main cdcda80.
   # Over the previous pin 0523818: main cdcda80 adds Hyperloom's knowledge cards (sources/community-kb) and the
@@ -348,6 +350,7 @@ preregistration:
 invocations:
   - phase: decode_attn_ab
     started: 2026-10-21 22:26 UTC
+    stopped: 2026-10-22 01:12 UTC   # about 2 h 45 min in; superseded by the run above on PR #2036 3b6481cf
     aka: 01f38696   # wiki wiki-gap-fill-decode-attention-isa e6ab004, hyperloom main bb2da633 (kf) / PR #2036 e9c16143 (kf_wiki_guided), Opus 5.5
     arms: kf kf_wiki_guided
     machines:
