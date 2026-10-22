@@ -349,6 +349,13 @@ preregistration:
 
 invocations:
   - phase: decode_attn_ab
+    started: 2026-10-22 01:22 UTC
+    aka: 9e60713a   # wiki wiki-gap-fill-decode-attention-isa e6ab004, hyperloom main bb2da633 (kf) / PR #2036 3b6481cf (kf_wiki_guided), Opus 5.5
+    arms: kf kf_wiki_guided
+    machines:
+      - {node: reserved MI300X dev node C, tasks: hip2hip/mla_decode}
+      - {node: reserved MI300X dev node D, tasks: triton2triton/geak_eval/L2/lean_atten_paged}
+  - phase: decode_attn_ab
     started: 2026-10-21 22:26 UTC
     stopped: 2026-10-22 01:12 UTC   # about 2 h 45 min in; superseded by the run above on PR #2036 3b6481cf
     aka: 01f38696   # wiki wiki-gap-fill-decode-attention-isa e6ab004, hyperloom main bb2da633 (kf) / PR #2036 e9c16143 (kf_wiki_guided), Opus 5.5
